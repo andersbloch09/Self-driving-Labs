@@ -1,6 +1,3 @@
-# Custom files for Python projects
-supabase/volumes/
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
