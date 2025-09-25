@@ -1,0 +1,84 @@
+# Official ROS 2 Humble Desktop Full (with Gazebo included)
+FROM osrf/ros:humble-desktop-full
+
+# Avoid interactive prompts during install
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install useful tools only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    python3-pip \
+    python3-colcon-common-extensions \
+    tmux \
+    x11-apps \
+    mesa-utils \
+    net-tools \
+    inetutils-ping \
+    ros-humble-gazebo-ros-pkgs \
+    ros-humble-moveit \
+    ros-humble-moveit-common \
+    ros-humble-moveit-ros-planning \
+    ros-humble-moveit-ros-move-group \
+    ros-humble-moveit-setup-assistant \
+    ros-humble-depth-image-proc \
+    ros-humble-image-transport \
+    ros-humble-camera-info-manager \
+    ros-humble-rqt \
+    ros-humble-rqt-common-plugins \
+    ros-humble-tf2 \
+    ros-humble-tf2-ros \
+    ros-humble-tf2-geometry-msgs \
+    ros-humble-tf2-tools \
+    ros-humble-std-msgs \
+    ros-humble-sensor-msgs \
+    ros-humble-geometry-msgs \
+    ros-humble-nav-msgs \
+    ros-humble-action-msgs \
+    ros-humble-control-msgs \
+    libxcb-xinerama0 \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    libxcb-render0 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+  && rm -rf /var/lib/apt/lists/*
+
+
+# Create the sdl user
+ARG USERNAME=sdl
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+RUN groupadd --gid $USER_GID $USERNAME \
+  && useradd -s /bin/bash --uid $USER_UID --gid $USER_GID -m $USERNAME \
+  && apt-get update \
+  && apt-get install -y sudo \
+  && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+  && chmod 0440 /etc/sudoers.d/$USERNAME \
+  && rm -rf /var/lib/apt/lists/*
+
+
+RUN apt-get update && apt-get install -y locales \
+  && locale-gen da_DK.UTF-8 \
+  && update-locale LC_ALL=da_DK.UTF-8 LANG=da_DK.UTF-8 \
+  && ln -fs /usr/share/zoneinfo/Europe/Copenhagen /etc/localtime \
+  && apt-get install -y tzdata \
+  && dpkg-reconfigure --frontend noninteractive tzdata \
+  && rm -rf /var/lib/apt/lists/*
+ENV LANG=da_DK.UTF-8
+
+# Set workspace directory
+WORKDIR /sdl_ws
+
+# Use bash for ROS environment
+SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update && apt-get install -y bash \
+  && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/sdl/.bashrc
+  
+# Auto-source ROS 2 environment
+RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
+RUN echo "source ./install/setup.bash" >> /home/sdl/.bashrc
+
+CMD ["bash"]
+

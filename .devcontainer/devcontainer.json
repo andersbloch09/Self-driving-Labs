@@ -1,0 +1,58 @@
+{
+    "name": "SDL Dev Container",
+    "dockerFile": "Dockerfile.sdl",
+    "workspaceMount": "source=${localWorkspaceFolder}/sdl_packages,target=/home/sdl/sdl_ws/src,type=bind,consistency=cached",
+    "mounts": [
+  "source=${localWorkspaceFolder}/supabase/.env,target=/home/sdl/sdl_ws/src/.env,type=bind"
+  ],
+    "workspaceFolder": "/home/sdl/sdl_ws",
+    "build": {
+      "args": {
+        "WORKSPACE": "${containerWorkspaceFolder}"
+      }
+    },
+    "postCreateCommand": "sudo chown -R sdl:sdl ~/sdl_ws",
+    "remoteUser": "sdl",
+    // This may be needed in the future for real-time kernel use cases
+    //--cap-add=SYS_NICE       # allow changing scheduling priority
+    //--ulimit rtprio=99        # allow max real-time priority
+    //--ipc=host               # shared memory for high-frequency communication (important for ROS 2)
+    "runArgs": [
+    "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",  // GUI support
+    "--env=DISPLAY",                                // X11 display
+    "--ipc=host",                                   // shared memory for Gazebo
+    "--gpus=all",                                   // use all GPUs
+    "--runtime=nvidia",                             // NVIDIA runtime
+    "-e", "NVIDIA_VISIBLE_DEVICES=all",            // expose all GPUs
+    "-e", "NVIDIA_DRIVER_CAPABILITIES=all",        // allow compute, graphics, video
+    "--cap-add=SYS_PTRACE"                          // allow debugging (future ROS dev)
+    ],                                                  
+    "containerEnv": {
+      "DISPLAY": "${localEnv:DISPLAY}", // Needed for GUI try ":0" for windows
+      "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
+      "XDG_RUNTIME_DIR": "${localEnv:XDG_RUNTIME_DIR}",
+      "PULSE_SERVER": "${localEnv:PULSE_SERVER}",
+      "LIBGL_ALWAYS_SOFTWARE": "1" // Needed for software rendering of opengl
+    },
+    // Set *default* container specific settings.json values on container create.
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "althack.ament-task-provider",
+          "DotJoshJohnson.xml",
+          "ms-azuretools.vscode-docker",
+          "ms-iot.vscode-ros",
+          "ms-python.python",
+          "ms-vscode.cpptools",
+          "redhat.vscode-yaml",
+          "smilerobotics.urdf",
+          "streetsidesoftware.code-spell-checker",
+          "twxs.cmake",
+          "yzhang.markdown-all-in-one",
+          "zachflower.uncrustify",
+          "vsliveshare.vsliveshare",
+          "mutantdino.resourcemonitor"
+        ]
+      }
+    }
+  }
