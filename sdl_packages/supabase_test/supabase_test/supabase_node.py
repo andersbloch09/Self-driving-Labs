@@ -44,10 +44,6 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
 
-    # Replace with your actual Supabase API URL and API key
-    supabase_url = 'http://localhost:8000'  # Replace with your Supabase URL
-    supabase_key = os.getenv('SERVICE_ROLE_KEY')  # Replace with your API key variable name
-    table_name = 'aruco_tag'
 
     if __name__ == "__main__":
         main()

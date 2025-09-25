@@ -1,6 +1,6 @@
-# Supabase Docker
+# Self-Driving Labs
 
-This is a minimal Docker Compose setup for self-hosting Supabase. Follow the steps [here](https://supabase.com/docs/guides/hosting/docker) to get started.
+This repository contains a project for self-driving labs, focusing on automated laboratory systems and intelligent experimentation workflows.
 
 This project uses a `.env.example` file to define required environment variables. To run the application, copy it to `.env` and fill in your own values.
 
