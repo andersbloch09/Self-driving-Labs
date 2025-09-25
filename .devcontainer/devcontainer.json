@@ -2,6 +2,9 @@
     "name": "SDL Dev Container",
     "dockerFile": "Dockerfile.sdl",
     "workspaceMount": "source=${localWorkspaceFolder}/sdl_packages,target=/home/sdl/sdl_ws/src,type=bind,consistency=cached",
+    "mounts": [
+  "source=${localWorkspaceFolder}/supabase/.env,target=/home/sdl/sdl_ws/src/.env,type=bind"
+  ],
     "workspaceFolder": "/home/sdl/sdl_ws",
     "build": {
       "args": {
