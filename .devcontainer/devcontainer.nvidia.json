@@ -1,0 +1,52 @@
+{
+    "name": "SDL Dev Container (NVIDIA GPU)",
+    "dockerFile": "Dockerfile.sdl",
+    "workspaceMount": "source=${localWorkspaceFolder}/sdl_packages,target=/home/sdl/sdl_ws/src,type=bind,consistency=cached",
+    "mounts": [
+        "source=${localWorkspaceFolder}/supabase/.env,target=/home/sdl/sdl_ws/src/.env,type=bind"
+    ],
+    "workspaceFolder": "/home/sdl/sdl_ws",
+    "build": {
+        "args": {
+            "WORKSPACE": "${containerWorkspaceFolder}"
+        }
+    },
+    "postCreateCommand": "sudo chown -R sdl:sdl ~/sdl_ws",
+    "remoteUser": "sdl",
+    "runArgs": [
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        "--env=DISPLAY",
+        "--ipc=host",
+        "--gpus=all",
+        "--runtime=nvidia",
+        "-e", "NVIDIA_VISIBLE_DEVICES=all",
+        "-e", "NVIDIA_DRIVER_CAPABILITIES=all",
+        "--cap-add=SYS_PTRACE"
+    ],
+    "containerEnv": {
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
+        "XDG_RUNTIME_DIR": "${localEnv:XDG_RUNTIME_DIR}",
+        "PULSE_SERVER": "${localEnv:PULSE_SERVER}"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "althack.ament-task-provider",
+                "DotJoshJohnson.xml",
+                "ms-azuretools.vscode-docker",
+                "ms-iot.vscode-ros",
+                "ms-python.python",
+                "ms-vscode.cpptools",
+                "redhat.vscode-yaml",
+                "smilerobotics.urdf",
+                "streetsidesoftware.code-spell-checker",
+                "twxs.cmake",
+                "yzhang.markdown-all-in-one",
+                "zachflower.uncrustify",
+                "vsliveshare.vsliveshare",
+                "mutantdino.resourcemonitor"
+            ]
+        }
+    }
+}
