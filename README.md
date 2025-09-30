@@ -9,11 +9,21 @@ Once ready to build the devcontainer image, run:
 ```bash
 docker buildx build -f .devcontainer/Dockerfile.sdl -t sdl_dev .
 ```
-NVIDIA users set:
+
+### Database Setup
+
+To manage the Supabase database:
+
 ```bash
-export GPU_RUN_ARGS="--gpus=all"
+# Start Supabase services
+cd supabase
+bash start.sh
+
+# Stop Supabase services
+cd supabase
+bash stop.sh
 ```
-AMD users set:
-```bash
-export GPU_RUN_ARGS="--device=/dev/kfd --device=/dev/dri --group-add=video"
-```
+
+
+
+
