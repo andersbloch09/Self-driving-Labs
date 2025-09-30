@@ -81,6 +81,8 @@ USER $USERNAME
 RUN git clone --depth 1 https://github.com/junegunn/fzf.git /home/$USERNAME/.fzf && yes | /home/$USERNAME/.fzf/install && echo "$(date)"
 USER root
 
+RUN pip install requests dotenv
+
 # Auto-source ROS 2 environment
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
 RUN echo "source ./install/setup.bash" >> /home/sdl/.bashrc

@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'supabase_node = supabase_test.supabase_node:main',
+            'supabase_function = supabase_test.supabase_function:main',
         ],
     },
 )

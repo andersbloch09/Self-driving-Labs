@@ -12,7 +12,7 @@ def main():
     # Try different possible URLs for Docker networking
     supabase_url = os.getenv('SUPABASE_URL', 'http://172.17.0.1:8000')  # Docker bridge network gateway (Linux)
     supabase_key = os.getenv('SERVICE_ROLE_KEY')  # Replace with your API key variable name
-    table_name = 'ArucoTag'  # Replace with your table name
+    function_name = 'hello'  # Replace with your table name
  
     api_url = supabase_url
     api_key = supabase_key
@@ -26,7 +26,7 @@ def main():
         }
         
         # Construct the endpoint URL for the table
-        endpoint_url = f"{api_url}/rest/v1/{table_name}"
+        endpoint_url = f"{api_url}/functions/v1/{function_name}"
         
         # Send a GET request to the REST API endpoint with headers
         response = requests.get(endpoint_url, headers=headers)
@@ -35,7 +35,7 @@ def main():
         if response.status_code == 200:
             # Parse and print the JSON response
             data = response.json()
-            print("Response from Supabase REST API:")
+            print("Response from Supabase function API:")
             for item in data:
                 print(item)
         else:
