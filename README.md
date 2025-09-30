@@ -8,3 +8,12 @@ This project uses a `.env.example` file to define required environment variables
 Once ready to build the devcontainer image, run:
 ```bash
 docker buildx build -f .devcontainer/Dockerfile.sdl -t sdl_dev .
+```
+NVIDIA users set:
+```bash
+export GPU_RUN_ARGS="--gpus=all"
+```
+AMD users set:
+```bash
+export GPU_RUN_ARGS="--device=/dev/kfd --device=/dev/dri --group-add=video"
+```

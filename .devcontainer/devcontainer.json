@@ -1,9 +1,10 @@
 {
-    "name": "SDL Dev Container (Universal GPU Support)",
+    "name": "SDL Dev Container (Auto-GPU Detection)",
     "dockerFile": "Dockerfile.sdl",
     "workspaceMount": "source=${localWorkspaceFolder}/sdl_packages,target=/home/sdl/sdl_ws/src,type=bind,consistency=cached",
     "mounts": [
-        "source=${localWorkspaceFolder}/supabase/.env,target=/home/sdl/sdl_ws/src/.env,type=bind"
+        "source=${localWorkspaceFolder}/supabase/.env,target=/home/sdl/sdl_ws/src/.env,type=bind",
+        "source=${localWorkspaceFolder}/.devcontainer,target=/home/sdl/sdl_ws/src/.devcontainer,type=bind,consistency=cached"
     ],
     "workspaceFolder": "/home/sdl/sdl_ws",
     "build": {
@@ -13,21 +14,18 @@
     },
     "postCreateCommand": "sudo chown -R sdl:sdl ~/sdl_ws",
     "remoteUser": "sdl",
-    // Universal GPU support - works with both NVIDIA and AMD
     "runArgs": [
-        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",  // GUI support
-        "--env=DISPLAY",                                // X11 display
-        "--ipc=host",                                   // shared memory for Gazebo
-        "--device=/dev/dri",                           // GPU access for both NVIDIA and AMD
-        "--group-add=video",                           // video group access
-        "--cap-add=SYS_PTRACE",                        // allow debugging (future ROS dev)
-        "--dns=8.8.8.8",                              // Add Google DNS
-        "--dns=8.8.4.4"                               // Add backup DNS
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        "--env=DISPLAY",
+        "--ipc=host",
+        "--cap-add=SYS_PTRACE",
+        "--dns=8.8.8.8",
+        "--dns=8.8.4.4",
+        "--device=/dev/dri"
     ],
-    "initializeCommand": [
-        "bash", "-c", 
-        "if command -v nvidia-smi >/dev/null 2>&1; then echo 'NVIDIA GPU detected - consider using devcontainer.nvidia.json for optimal performance'; elif lspci | grep -i amd | grep -i vga >/dev/null; then echo 'AMD GPU detected - consider using devcontainer.amd.json for optimal performance'; else echo 'Generic GPU support enabled'; fi"
-    ],
+    "hostRequirements": {
+        "gpu": "optional"
+    },
     "containerEnv": {
         "DISPLAY": "${localEnv:DISPLAY}",
         "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
@@ -36,7 +34,6 @@
         "LIBGL_ALWAYS_SOFTWARE": "1",
         "GAZEBO_MASTER_URI": "http://localhost:11345"
     },
-    // Set *default* container specific settings.json values on container create.
     "customizations": {
         "vscode": {
             "extensions": [
