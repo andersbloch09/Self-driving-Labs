@@ -76,10 +76,16 @@ SHELL ["/bin/bash", "-c"]
 RUN apt-get update && apt-get install -y bash \
   && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/sdl/.bashrc
 
+
 # Fuzzy finder (fzf) install. We temporarily switch user since .fzf/install uses "~", which otherwise would evaluate to /root instead of /home/$USERNAME.
 USER $USERNAME
 RUN git clone --depth 1 https://github.com/junegunn/fzf.git /home/$USERNAME/.fzf && yes | /home/$USERNAME/.fzf/install && echo "$(date)"
 USER root
+
+# Install Python packages
+RUN pip install requests \
+                dotenv \
+                vcstool 
 
 # Auto-source ROS 2 environment
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc

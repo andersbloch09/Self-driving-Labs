@@ -10,6 +10,7 @@ Once ready to build the devcontainer image, run:
 docker buildx build -f .devcontainer/Dockerfile.sdl -t sdl_dev .
 ```
 
+
 ### Database Setup
 
 To manage the Supabase database:
@@ -23,7 +24,4 @@ bash start.sh
 cd supabase
 bash stop.sh
 ```
-
-
-
 
