@@ -36,8 +36,7 @@ def main():
             # Parse and print the JSON response
             data = response.json()
             print("Response from Supabase function API:")
-            for item in data:
-                print(item)
+            print(data)
         else:
             print(f"Failed to fetch data. HTTP Status Code: {response.status_code}")
             print("Response:", response.text)
