@@ -12,9 +12,9 @@ public:
     DatabaseService() : Node("database_service")
     {
         this->db_name = this->declare_parameter<std::string>("db_name", "postgres");
-        this->db_user = this->declare_parameter<std::string>("db_user", "postgres");
+        this->db_user = this->declare_parameter<std::string>("db_user", "postgres.mytenant");
         this->db_password = this->declare_parameter<std::string>("db_password", "your-super-secret-and-long-postgres-password");
-        this->db_host = this->declare_parameter<std::string>("db_host", "127.0.0.1");
+        this->db_host = this->declare_parameter<std::string>("db_host", "172.17.0.1");
         this->db_port = this->declare_parameter<std::string>("db_port", "5432");
 
         get_chemical_service_ = this->create_service<database_service_pkg::srv::GetChemical>(
@@ -50,33 +50,43 @@ private:
     {
         try {
             pqxx::connection C("dbname=" + db_name + " user=" + db_user +
-                            " password=" + db_password + " host=" + db_host + 
+                            " password=" + db_password + " hostaddr=" + db_host +
                             " port=" + db_port);
-            pqxx::work W(C);
+            pqxx::work W(C); // Start a transaction
 
-            std::string query = "SELECT \"Handover Slot\" FROM Opentrons WHERE \"TrayID\" = " + std::to_string(request->tray_id) + ";";
+            
+            int tray_id = static_cast<int>(request->tray_id);
+            std::string query = "SELECT \"HandoverSlot\" FROM \"OpenTrons\" WHERE \"TrayID\" = " + W.quote(tray_id) + ";";
             pqxx::result R = W.exec(query);
 
             if (R.empty()) {
                 response->success = false;
                 response->message = "Tray not found in database.";
                 response->slot = -1;  // Indicate invalid slot
-                RCLCPP_WARN(this->get_logger(), "Tray ID %d not found in database", request->tray_id);
+                RCLCPP_WARN(this->get_logger(), "Tray ID %d not found in database", static_cast<int>(request->tray_id));
                 return;
             }
-
-            // Get the slot value from the first row
-            response->slot = R[0]["Handover Slot"].as<int>();
+                
+            // Get the slot value using column index instead of name
+            int slot_value = R[0][0].as<int>();  // Use index 0 instead of column name
+            response->slot = static_cast<int8_t>(slot_value);
             response->success = true;
             response->message = "Tray slot retrieved successfully.";
             
-            RCLCPP_INFO(this->get_logger(), "Tray ID %d is in slot %d", request->tray_id, response->slot);
+            RCLCPP_INFO(this->get_logger(), "Tray ID %s is in slot %s", 
+                        std::to_string(static_cast<int>(request->tray_id)).c_str(),
+                        std::to_string(static_cast<int>(response->slot)).c_str());
+        
             
         } catch (const std::exception &e) {
             response->success = false;
             response->message = "Database error: " + std::string(e.what());
             response->slot = -1;
             RCLCPP_ERROR(this->get_logger(), "Database error: %s", e.what());
+        } catch (...) {
+            response->success = false;
+            response->message = "Caught unknown exception";
+            response->slot = -1;
         }
     }
 

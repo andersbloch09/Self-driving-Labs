@@ -13,7 +13,7 @@ int main(int argc, char **argv)
     // Test the tray slot service (new functionality)
     RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Testing tray slot service...");
     auto tray_request = std::make_shared<database_service_pkg::srv::GetOTTraySlot::Request>();
-    tray_request->tray_id = 1;  // Example tray ID - change this to test different trays
+    tray_request->tray_id = 5;  // Example tray ID - change this to test different trays
     
     while (!tray_slot_client->wait_for_service(std::chrono::seconds(1))) {
         RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Waiting for tray slot service...");

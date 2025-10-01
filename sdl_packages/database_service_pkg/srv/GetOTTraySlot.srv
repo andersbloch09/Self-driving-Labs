@@ -1,4 +1,4 @@
-int8 tray # The tray we want to fetch from the opentron
+int8 tray_id # The tray we want to fetch from the opentron
 ---
 int8 slot # The slot the tray we want to fetch is in
 
