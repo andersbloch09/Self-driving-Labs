@@ -1,0 +1,7 @@
+int8 tray # The tray we want to fetch from the opentron
+---
+int8 slot # The slot the tray we want to fetch is in
+
+bool success # Whether we found the tray in the database
+string message # Any error message if we did not find the tray
+# Maybe add the transform to that slot here at some point
