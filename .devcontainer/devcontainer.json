@@ -15,6 +15,7 @@
     "postCreateCommand": "sudo chown -R sdl:sdl ~/sdl_ws",
     "remoteUser": "sdl",
     "runArgs": [
+        "--network=supabase_default",
         "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
         "--env=DISPLAY",
         "--ipc=host",
