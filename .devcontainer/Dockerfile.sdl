@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-nav-msgs \
     ros-humble-action-msgs \
     ros-humble-control-msgs \
+    ros-humble-realsense2-*\
     libxcb-xinerama0 \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
@@ -87,7 +88,8 @@ USER root
 # Install Python packages
 RUN pip install requests \
                 dotenv \
-                vcstool 
+                vcstool \
+                pyrealsense2
 
 # Auto-source ROS 2 environment
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
