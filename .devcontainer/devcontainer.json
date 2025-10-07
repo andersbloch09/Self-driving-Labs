@@ -22,7 +22,10 @@
         "--cap-add=SYS_PTRACE",
         "--dns=8.8.8.8",
         "--dns=8.8.4.4",
-        "--device=/dev/dri"
+        "--device=/dev/dri",
+        "--privileged",
+        "--device=/dev/bus/usb",
+        "--volume=/dev:/dev:rw"
     ],
     "hostRequirements": {
         "gpu": "optional"
