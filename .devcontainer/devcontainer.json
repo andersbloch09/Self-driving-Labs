@@ -29,7 +29,8 @@
         "--dns=8.8.4.4",
         "--device=/dev/dri",
         "--network=host",
-        "--privileged"
+        "--privileged",
+        "--device=/dev/bus/usb",
     ],
     "hostRequirements": {
         "gpu": "optional"

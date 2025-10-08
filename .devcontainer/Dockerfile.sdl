@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-control-msgs \
     ros-humble-py-binding-tools \
     ros-humble-ament-cmake-clang-format \
+    ros-humble-realsense2-*\
     libxcb-xinerama0 \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
@@ -49,6 +50,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfmt-dev \
     build-essential \
     cmake \
+    libpqxx-dev \
+    libpq-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # Download and install Eigen 3.3.9
@@ -107,7 +110,8 @@ USER root
 # Install Python packages
 RUN pip install requests \
                 dotenv \
-                vcstool 
+                vcstool \
+                pyrealsense2
 
 # Auto-source ROS 2 environment
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
