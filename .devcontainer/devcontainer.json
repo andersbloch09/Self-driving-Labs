@@ -4,7 +4,8 @@
     "workspaceMount": "source=${localWorkspaceFolder}/sdl_packages,target=/home/sdl/sdl_ws/src,type=bind,consistency=cached",
     "mounts": [
         "source=${localWorkspaceFolder}/supabase/.env,target=/home/sdl/sdl_ws/src/.env,type=bind",
-        "source=${localWorkspaceFolder}/.devcontainer,target=/home/sdl/sdl_ws/src/.devcontainer,type=bind,consistency=cached"
+        "source=${localWorkspaceFolder}/.devcontainer,target=/home/sdl/sdl_ws/src/.devcontainer,type=bind,consistency=cached",
+        "source=${localWorkspaceFolder}/README.md,target=/home/sdl/sdl_ws/src/README.md,type=bind,consistency=cached"
     ],
     "workspaceFolder": "/home/sdl/sdl_ws",
     "build": {
@@ -15,13 +16,20 @@
     "postCreateCommand": "sudo chown -R sdl:sdl ~/sdl_ws",
     "remoteUser": "sdl",
     "runArgs": [
+        "--memory-swap=12g",
+        "--memory=6g",
+        "--cap-add=SYS_NICE",
+        "--ulimit", "rtprio=99",
+        "--ulimit", "memlock=-1",
         "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
         "--env=DISPLAY",
         "--ipc=host",
         "--cap-add=SYS_PTRACE",
         "--dns=8.8.8.8",
         "--dns=8.8.4.4",
-        "--device=/dev/dri"
+        "--device=/dev/dri",
+        "--network=host",
+        "--privileged"
     ],
     "hostRequirements": {
         "gpu": "optional"

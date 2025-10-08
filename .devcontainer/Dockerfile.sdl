@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-camera-info-manager \
     ros-humble-rqt \
     ros-humble-rqt-common-plugins \
+    ros-humble-ros2-control \
+    ros-humble-hardware-interface \
     ros-humble-tf2 \
     ros-humble-tf2-ros \
     ros-humble-tf2-geometry-msgs \
@@ -35,13 +37,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-nav-msgs \
     ros-humble-action-msgs \
     ros-humble-control-msgs \
+    ros-humble-py-binding-tools \
+    ros-humble-ament-cmake-clang-format \
     libxcb-xinerama0 \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
     libxcb-render0 \
     libxcb-shape0 \
     libxcb-xfixes0 \
+    libpoco-dev \
+    libfmt-dev \
+    build-essential \
+    cmake \
   && rm -rf /var/lib/apt/lists/*
+
+# Download and install Eigen 3.3.9
+RUN apt-get update && apt-get install -y wget cmake
+RUN wget https://gitlab.com/libeigen/eigen/-/archive/3.3.9/eigen-3.3.9.tar.gz && \
+    tar -xzf eigen-3.3.9.tar.gz && \
+    cd eigen-3.3.9 && \
+    mkdir build && cd build && \
+    cmake .. && make install && \
+    cd ../.. && rm -rf eigen-3.3.9 eigen-3.3.9.tar.gz
+
+    # Install DQ Robotics C++ library
+RUN git clone https://github.com/dqrobotics/cpp.git /opt/dqrobotics && \
+    cd /opt/dqrobotics && mkdir build && cd build && \
+    cmake .. && make && make install
 
 
 # Create the sdl user
@@ -90,6 +112,12 @@ RUN pip install requests \
 # Auto-source ROS 2 environment
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
 RUN echo "source ./install/setup.bash" >> /home/sdl/.bashrc
+
+# Set up MuJoCo and libfranka environment variables
+ENV MUJOCO_DIR=/home/sdl/sdl_ws/src/franka/mujoco_install
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${MUJOCO_DIR}/lib
+ENV LIBRARY_PATH=${LIBRARY_PATH}:${MUJOCO_DIR}/lib
+
 
 CMD ["bash"]
 

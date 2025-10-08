@@ -1,0 +1,20 @@
+repositories:
+  libfranka:
+    type: git
+    url: https://github.com/frankarobotics/libfranka.git
+    version: 0.9.2
+  multipanda_ros2:
+    type: git
+    url: https://github.com/tenfoldpaper/multipanda_ros2.git
+  moveit_task_constructor:
+    type: git
+    url: https://github.com/ros-planning/moveit_task_constructor.git
+    version: humble
+  mujoco:
+    type: git
+    url: https://github.com/deepmind/mujoco.git
+    version: 3.2.0
+  mujoco_ros_pkgs:
+    type: git
+    url: https://github.com/tenfoldpaper/mujoco_ros_pkgs.git
+  
