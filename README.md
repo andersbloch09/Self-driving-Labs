@@ -22,30 +22,10 @@ sudo cmake --install .
 ```
 inside the new build folder. 
 
-To install mojoco as explained in the repo use the following commands:
-```bash
-cd ~/sdl_ws/src/franka/mujoco
-mkdir build
-cd build
-cmake .. -DUSE_GLFW=ON          # This replaces 'cmake $PATH_TO_CLONED_REPO'
-cd ..              
-cmake --build . -j$(nproc)       # Build using all CPU cores
-cd ..
-mkdir mujoco_install
-cd mujoco/build
-cmake .. -DCMAKE_INSTALL_PREFIX=/home/sdl/sdl_ws/src/franka/mujoco_install
-cd ..
-sudo cmake --install . --prefix /home/sdl/sdl_ws/src/franka/mujoco_install
-```
 
 ```bash
-export MUJOCO_DIR=~/sdl_ws/src/franka/mujoco_install
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$MUJOCO_DIR/lib
-export LIBRARY_PATH=$LIBRARY_PATH:$MUJOCO_DIR/lib
-export CMAKE_PREFIX_PATH=~/sdl_ws/src/franka/mujoco_install/lib/cmake:~/sdl_ws/src/franka/libfranka/build/lib/cmake:$CMAKE_PREFIX_PATH
+export CMAKE_PREFIX_PATH=~/sdl_ws/src/franka/mujoco_install/lib/cmake:~/sdl_ws/src/franka/libfranka/build/lib/
 ```
-
-
 
 If libfranka fails try: 
 ```bash 
@@ -62,12 +42,6 @@ After this run the following line from the source directory:
 ```bash 
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
-
-Potential build could be to just use: 
-```bash
-colcon build --packages-select libfranka franka_hardware franka_control franka_gripper franka_msgs --cmake-args -DCMAKE_BUILD_TYPE=Release
-```
-
 
 ### Database Setup
 
