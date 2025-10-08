@@ -113,11 +113,5 @@ RUN pip install requests \
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
 RUN echo "source ./install/setup.bash" >> /home/sdl/.bashrc
 
-# Set up MuJoCo and libfranka environment variables
-ENV MUJOCO_DIR=/home/sdl/sdl_ws/src/franka/mujoco_install
-ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${MUJOCO_DIR}/lib
-ENV LIBRARY_PATH=${LIBRARY_PATH}:${MUJOCO_DIR}/lib
-
-
 CMD ["bash"]
 
