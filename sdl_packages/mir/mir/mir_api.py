@@ -3,14 +3,14 @@ import json
 import math
 import time
 
-class MiR():
+class MiR_API():
 
     def __init__(self):
 
         self.headers = {}
         self.headers['Content-Type'] = 'application/json'
         self.headers['Accept-Language'] = 'en_US'
-        self.headers['Authorization'] = 'Basic ZGlzdHJpYnV0b3I6NjJmMmYwZjFlZmYxMGQzMTUyYzk1ZjZmMDU5NjU3NmU0ODJiYjhlNDQ4MDY0MzNmNGNmOTI5NzkyODM0YjAxNA=='
+        self.headers['Authorization'] = 'Basic OmUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTU='
         self.group_id = 'mirconst-guid-0000-0011-missiongroup'
         self.session_id = '85cd7f3f-f2b7-11ea-ad20-0001299f16e3' #'a2f5b1e6-d558-11ea-a95c-0001299f04e5'
         
@@ -332,6 +332,8 @@ class MiR():
 
     def get_mission_latest_mission_status(self,mir_ip):
         exe_mission = self.get_mission_queue(mir_ip)
+        if len(exe_mission) == 0:
+            return False
         if exe_mission[-1]['state'] == 'Done':
             return True
 

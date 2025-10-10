@@ -1,0 +1,15 @@
+<library path="GoToStorage">
+  <class type="GoToStorage" base_class_type="BT::TreeNode">
+    <description>Sends the MiR robot to storage location</description>
+  </class>
+</library>
+<library path="GoToOpenTrons2">
+  <class type="GoToOpenTrons2" base_class_type="BT::TreeNode">
+    <description>Sends the MiR robot to OpenTrons2 location</description>
+  </class>
+</library>
+<library path="GoToHome">
+  <class type="GoToHome" base_class_type="BT::TreeNode">
+    <description>Sends the MiR robot to home location</description>
+  </class>
+</library>

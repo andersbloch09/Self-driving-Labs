@@ -13,7 +13,7 @@ class FibonacciActionServer(Node):
     def __init__(self):
         super().__init__('mir_server_node')
         self.mir = mir_api.MiR()
-        self.mir_url = "http://172.20.66.138/api/v2.0.0/"
+        self.mir_url = "http://192.168.1.81/api/v2.0.0/"
         self.battery_threshold = 30
 
         status = self.mir.get_system_info(self.mir_url)

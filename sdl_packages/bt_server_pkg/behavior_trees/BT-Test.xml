@@ -1,0 +1,12 @@
+ <root BTCPP_format="4" >
+     <BehaviorTree ID="MainTree">
+        <Sequence name="root_sequence">
+            <GoToStorage   name="go_to_storage" 
+                          action_name="go_to_mission" />
+            <GoToOpenTrons2    name="go_to_opentrons2" 
+                              action_name="go_to_mission" />
+            <GoToHome name="go_to_home" 
+                     action_name="go_to_mission" />
+        </Sequence>
+     </BehaviorTree>
+ </root>

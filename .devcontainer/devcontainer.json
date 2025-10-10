@@ -14,14 +14,26 @@
     },
     "postCreateCommand": "sudo chown -R sdl:sdl ~/sdl_ws",
     "remoteUser": "sdl",
+    "forwardPorts": [1666, 1667, 1668],
+    "portsAttributes": {
+        "1666": {
+            "label": "Groot2 Publisher",
+            "onAutoForward": "notify"
+        },
+        "1667": {
+            "label": "Groot2 Publisher Port",
+            "onAutoForward": "silent"
+        },
+        "1668": {
+            "label": "Groot2 Server Port", 
+            "onAutoForward": "silent"
+        }
+    },
     "runArgs": [
-        "--network=supabase_default",
         "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
         "--env=DISPLAY",
         "--ipc=host",
         "--cap-add=SYS_PTRACE",
-        "--dns=8.8.8.8",
-        "--dns=8.8.4.4",
         "--device=/dev/dri",
         "--privileged",
         "--device=/dev/bus/usb",

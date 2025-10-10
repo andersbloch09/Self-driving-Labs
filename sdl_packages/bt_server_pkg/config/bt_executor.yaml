@@ -1,0 +1,21 @@
+bt_server:
+  ros__parameters:
+    # Groot2 monitoring ports
+    groot2_port: 1666
+    publisher_port: 1667
+    server_port: 1668
+    
+    # Behavior tree files - use package_name/subfolder format  
+    behavior_trees: ["bt_server_pkg/behavior_trees"]
+    
+    # Plugin libraries to load - use package_name/subfolder format
+    plugins: ["bt_server_pkg/plugins"]
+    
+    # Enable monitoring
+    enable_groot_monitoring: true
+    
+    # Tree execution settings
+    tick_frequency_hz: 10.0
+    
+    # Logging level
+    log_level: "INFO"

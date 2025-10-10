@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-action-msgs \
     ros-humble-control-msgs \
     ros-humble-realsense2-*\
+    ros-humble-behaviortree-cpp \
     libxcb-xinerama0 \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
