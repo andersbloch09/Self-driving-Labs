@@ -10,7 +10,7 @@ class MiR_API():
         self.headers = {}
         self.headers['Content-Type'] = 'application/json'
         self.headers['Accept-Language'] = 'en_US'
-        self.headers['Authorization'] = 'Basic OmUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTU='
+        self.headers['Authorization'] = 'Basic ZGlzdHJpYnV0b3I6NjJmMmYwZjFlZmYxMGQzMTUyYzk1ZjZmMDU5NjU3NmU0ODJiYjhlNDQ4MDY0MzNmNGNmOTI5NzkyODM0YjAxNA=='
         self.group_id = 'mirconst-guid-0000-0011-missiongroup'
         self.session_id = '85cd7f3f-f2b7-11ea-ad20-0001299f16e3' #'a2f5b1e6-d558-11ea-a95c-0001299f04e5'
         
