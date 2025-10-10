@@ -1,0 +1,13 @@
+# Goal
+string protocol_path
+string custom_labware_folder
+
+---
+# Result
+bool success
+string message
+string final_status
+
+---
+# Feedback
+string status
