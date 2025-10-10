@@ -8,16 +8,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     package_dir = get_package_share_directory('bt_server_pkg')
     
-    # Launch configuration
-    groot2_port_arg = DeclareLaunchArgument(
-        'groot2_port',
-        default_value='1666',
-        description='Port for Groot2 monitoring connection'
-    )
-    
     return LaunchDescription([
-        groot2_port_arg,
-        
         # MiR mission action server
         Node(
             package='bt_server_pkg',
@@ -26,7 +17,7 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # Behavior tree server with Groot2 monitoring
+        # Behavior tree server
         Node(
             package='bt_server_pkg', 
             executable='bt_server',

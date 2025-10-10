@@ -32,19 +32,11 @@ protected:
     // Add a console logger to see what's happening
     logger_cout_ = std::make_shared<BT::StdCoutLogger>(tree);
     
-    // Add Groot2 publisher for live monitoring
-    // Temporarily commented out to debug segfault
-    /*
-    try {
-      groot2_publisher_ = std::make_shared<BT::Groot2Publisher>(tree, 1666);
-      RCLCPP_INFO(node()->get_logger(), "Groot2 publisher started on port 1666");
-      RCLCPP_INFO(node()->get_logger(), "Connect Groot2 to: localhost:1666");
-    } catch (const std::exception& e) {
-      RCLCPP_WARN(node()->get_logger(), "Failed to start Groot2 publisher: %s", e.what());
-    }
-    */
+    // Skip Groot2 publisher - let external client handle monitoring
+    // External Groot2 client can connect directly to the behavior tree
     
-    RCLCPP_INFO(node()->get_logger(), "Behavior Tree created with monitoring enabled");
+    RCLCPP_INFO(node()->get_logger(), "Behavior Tree created with console logging enabled");
+    RCLCPP_INFO(node()->get_logger(), "External Groot2 client should connect to port 1666 for monitoring");
   }
 
   std::optional<std::string> onTreeExecutionCompleted(BT::NodeStatus status,
@@ -52,7 +44,6 @@ protected:
   {
     // Clean up loggers
     logger_cout_.reset();
-    // groot2_publisher_.reset(); // Commented out for debugging
     
     std::string result_msg;
     if (was_cancelled) {
@@ -80,7 +71,6 @@ protected:
 
 private:
   std::shared_ptr<BT::StdCoutLogger> logger_cout_;
-  //std::shared_ptr<BT::Groot2Publisher> groot2_publisher_;
 };
 
 int main(int argc, char* argv[])
