@@ -23,6 +23,7 @@ setup(
             'mir_server_node = mir.mir_server_node:main',
             'mir_position_node = mir.mir_check_position_node:main',
             'mir_turn_90 = mir.mir_turn_90:main',
+            'mir_go_to_home = mir.mir_goto:main',
         ],
     },
 )

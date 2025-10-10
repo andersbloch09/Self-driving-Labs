@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.action import ActionServer
 from rclpy.node import Node
-from mir import mir_api
+from . import mir_api
 # from action_tutorials_interfaces.action import Fibonacci
 # from behavior_tree_ros2_actions.action import FindArucoTag
 from mir.action import MirMission
@@ -12,8 +12,8 @@ class FibonacciActionServer(Node):
 
     def __init__(self):
         super().__init__('mir_server_node')
-        self.mir = mir_api.MiR()
-        self.mir_url = "http://172.20.66.138/api/v2.0.0/"
+        self.mir = mir_api.MiR_API()
+        self.mir_url = "http://192.168.1.81/api/v2.0.0/"
         self.battery_threshold = 30
 
         status = self.mir.get_system_info(self.mir_url)

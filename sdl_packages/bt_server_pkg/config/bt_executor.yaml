@@ -1,0 +1,13 @@
+bt_server:
+  ros__parameters:
+    # Behavior tree files - use package_name/subfolder format  
+    behavior_trees: ["bt_server_pkg/behavior_trees"]
+    
+    # Plugin libraries to load - use package_name/subfolder format
+    plugins: ["bt_server_pkg/plugins"]
+    
+    # Tree execution settings
+    tick_frequency_hz: 10.0
+    
+    # Logging level
+    log_level: "INFO"

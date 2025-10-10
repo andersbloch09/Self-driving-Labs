@@ -3,7 +3,7 @@ import json
 import math
 import time
 
-class MiR():
+class MiR_API():
 
     def __init__(self):
 
@@ -332,6 +332,8 @@ class MiR():
 
     def get_mission_latest_mission_status(self,mir_ip):
         exe_mission = self.get_mission_queue(mir_ip)
+        if len(exe_mission) == 0:
+            return False
         if exe_mission[-1]['state'] == 'Done':
             return True
 

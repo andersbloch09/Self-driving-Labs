@@ -25,8 +25,6 @@
         "--env=DISPLAY",
         "--ipc=host",
         "--cap-add=SYS_PTRACE",
-        "--dns=8.8.8.8",
-        "--dns=8.8.4.4",
         "--device=/dev/dri",
         "--network=host",
         "--privileged",
