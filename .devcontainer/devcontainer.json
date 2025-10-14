@@ -28,7 +28,7 @@
         "--device=/dev/dri",
         "--network=host",
         "--privileged",
-        "--device=/dev/bus/usb",
+        "--device=/dev/bus/usb"
     ],
     "hostRequirements": {
         "gpu": "optional"

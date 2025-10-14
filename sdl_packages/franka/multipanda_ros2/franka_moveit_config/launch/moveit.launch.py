@@ -244,6 +244,20 @@ def generate_launch_description():
                           use_fake_hardware_parameter_name: use_fake_hardware}.items(),
         condition=IfCondition(load_gripper)
     )
+
+    manipulation_node = Node(
+    package='manipulation',
+    executable='manipulation',
+    name='manipulator',
+    output='screen',
+    parameters=[
+        robot_description,
+        robot_description_semantic,
+        kinematics_yaml,
+        ompl_planning_pipeline_config,
+    ]
+    )
+
     return LaunchDescription(
         [robot_arg,
          use_fake_hardware_arg,
@@ -256,7 +270,8 @@ def generate_launch_description():
          ros2_control_node,
          mongodb_server_node,
          joint_state_publisher,
-         gripper_launch_file
+         gripper_launch_file,
+         manipulation_node
          ]
         + load_controllers
     )
