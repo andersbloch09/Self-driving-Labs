@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-moveit-common \
     ros-humble-moveit-ros-planning \
     ros-humble-moveit-ros-move-group \
+    ros-humble-moveit-visual-tools \
     ros-humble-moveit-setup-assistant \
     ros-humble-depth-image-proc \
     ros-humble-image-transport \

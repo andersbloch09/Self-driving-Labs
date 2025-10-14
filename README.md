@@ -24,12 +24,13 @@ inside the new build folder.
 
 
 ```bash
-export CMAKE_PREFIX_PATH=~/sdl_ws/src/franka/mujoco_install/lib/cmake:~/sdl_ws/src/franka/libfranka/build/lib/
+export CMAKE_PREFIX_PATH=~/sdl_ws/src/franka/libfranka/build/lib/
 ```
 
 If libfranka fails try: 
 ```bash 
 colcon build --packages-select libfranka --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 1
+source install/setup.bash
 ```
 
 Download dependcies: 
@@ -38,9 +39,13 @@ rosdep update
 rosdep install --from-paths src --ignore-src --rosdistro humble -y
 ```
 
-After this run the following line from the source directory: 
+After this run the following one of the following line from the outer directory: 
 ```bash 
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+```
+For lower memory: 
+```bash 
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 1
 ```
 
 ### Database Setup
