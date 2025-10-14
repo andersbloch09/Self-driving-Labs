@@ -100,7 +100,7 @@ class OT2Client:
         )
         resp.raise_for_status()
         run_id = resp.json()["data"]["id"]
-        print(f"Created run ID: {run_id}")
+        #print(f"Created run ID: {run_id}")
         return run_id
 
     def start_run(self, run_id: str):
@@ -111,7 +111,7 @@ class OT2Client:
             json={"data": {"actionType": "play"}}
         )
         resp.raise_for_status()
-        print(f"Run {run_id} started.")
+        #print(f"Run {run_id} started.")
 
     def stop_run(self, run_id: str):
         """Stop a running run."""
@@ -121,7 +121,7 @@ class OT2Client:
             json={"data": {"actionType": "stop"}}
         )
         resp.raise_for_status()
-        print(f"Run {run_id} stopped.")
+        #print(f"Run {run_id} stopped.")
 
     def get_run_status(self, run_id: str) -> str:
         """Get the current status of a run."""

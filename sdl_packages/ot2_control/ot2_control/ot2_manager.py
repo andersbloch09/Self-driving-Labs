@@ -47,15 +47,16 @@ class OT2Manager(Node):
         custom_labware_folder = goal_handle.request.custom_labware_folder
 
         # Example: start your OT2 run
-        self.status, self.current_run_id = self.client.run_protocol(protocol_path, custom_labware_folder)
+        self.status, self.current_run_id = self.client.run_protocol(self, protocol_path, custom_labware_folder)
         self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
         while rclpy.ok():
             # Check external stop or client cancel
-            print(goal_handle.is_cancel_requested)
-            print(f"Started OT-2 protocol with run ID: {self.current_run_id}")
+            #print(goal_handle.is_cancel_requested)
+            #print(f"Started OT-2 protocol with run ID: {self.current_run_id}")
+            #self.get_logger().info(f"Protocol status: {self.status}")
             if goal_handle.is_cancel_requested:
                 self.get_logger().info("Cancel requested — stopping OT-2 protocol...")
-                self.client.stop_run(self.current_run_id)
+                self.client.stop_run(self, self.current_run_id)
 
                 goal_handle.canceled()
                 result.message = "Cancelled via action"
@@ -66,8 +67,14 @@ class OT2Manager(Node):
 
             current_status = self.client.get_run_status(self.current_run_id)
 
+            commands, current = self.client.get_commands(self.current_run_id)
+            command_no = commands.index(current) + 1
+            total_commands = len(commands)
+            progress = ("Performing command " + str(command_no) + " of " + str(total_commands))
+
+
             #Check if OT-2 finished normally
-            if current_status == "finished":
+            if current_status == "succeeded":
                 self.get_logger().info("Goal completed successfully")
                 goal_handle.succeed()
                 result.success = True
@@ -78,7 +85,8 @@ class OT2Manager(Node):
 
             #Normal feedback
             feedback_msg = RunProtocol.Feedback()
-            feedback_msg.status = current_status
+            #feedback_msg.status = current_status
+            feedback_msg.status = progress
             goal_handle.publish_feedback(feedback_msg)
 
             # Process pending callbacks once and sleep briefly

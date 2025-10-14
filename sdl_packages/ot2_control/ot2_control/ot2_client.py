@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import cmd
 from inspect import stack
 from urllib import response
 import requests
@@ -56,24 +57,25 @@ class OT2Client:
         return False
 
 
-    def verify_labware(self, protocol_path, custom_labware_folder):
+    def verify_labware(self, node, protocol_path, custom_labware_folder):
         labware_names = self.extract_labware_names(protocol_path)
         
+        node.get_logger().info(f"Checking labware in uploaded protocol...")
+
         custom_labware = []
 
         for name in labware_names:
-            print(f" - {name}: \n", end="")
             if self.check_labware_in_custom_folder(name, custom_labware_folder):
-                print("Found in custom labware folder")
+                node.get_logger().info(f"Found {name} in custom labware folder")
                 custom_labware.append(os.path.join(custom_labware_folder, name + ".json"))
             else:
-                print("Not found in custom labware folder, if labware is not in the Opentrons database, protocol may fail.")
+                node.get_logger().warn(f"{name} not found in custom labware folder, if labware is not in the Opentrons database, protocol may fail.")
 
         return custom_labware
 
 
-    def upload_protocol(self, protocol_file, custom_labware):
-        print(f"Uploading protocol {protocol_file} with {len(custom_labware)} custom labware files...")
+    def upload_protocol(self, node, protocol_file, custom_labware):
+        node.get_logger().info(f"Uploading protocol {os.path.basename(protocol_file)} with {len(custom_labware)} custom labware files...")
         with ExitStack() as stack:
         # Open protocol file
             f_protocol = stack.enter_context(open(protocol_file, "rb"))
@@ -85,7 +87,7 @@ class OT2Client:
             files = [("files", f_protocol)] + [("files", f) for f in labware_file_objects]
 
             # Print the names of all files being uploaded
-            print("uploading files:", files)
+            #print("uploading files:", files)
 
             # Upload to robot
             resp = requests.post(f"{self.base_url}/protocols", headers=self.headers, files=files)
@@ -97,7 +99,7 @@ class OT2Client:
         return protocol_id
 
 
-    def create_run(self, protocol_id: str) -> str:
+    def create_run(self, node, protocol_id: str) -> str:
         """Create a run for the given protocol. Returns run_id."""
         resp = requests.post(
             f"{self.base_url}/runs",
@@ -106,11 +108,11 @@ class OT2Client:
         )
         resp.raise_for_status()
         run_id = resp.json()["data"]["id"]
-        print(f"Created run ID: {run_id}")
+        node.get_logger().info(f"Created run ID: {run_id}")
         return run_id
 
 
-    def start_run(self, run_id: str):
+    def start_run(self, node, run_id: str):
         """Start (play) the run."""
         resp = requests.post(
             f"{self.base_url}/runs/{run_id}/actions",
@@ -118,10 +120,10 @@ class OT2Client:
             json={"data": {"actionType": "play"}}
         )
         resp.raise_for_status()
-        print(f"Run {run_id} started.")
+        node.get_logger().info(f"Run {run_id} started.")
 
 
-    def stop_run(self, run_id: str):
+    def stop_run(self, node, run_id: str):
         """Stop a running run."""
         resp = requests.post(
             f"{self.base_url}/runs/{run_id}/actions",
@@ -129,7 +131,7 @@ class OT2Client:
             json={"data": {"actionType": "stop"}}
         )
         resp.raise_for_status()
-        print(f"Run {run_id} stopped.")
+        node.get_logger().info(f"Run {run_id} stopped.")
 
 
     def get_run_status(self, run_id: str) -> str:
@@ -137,17 +139,32 @@ class OT2Client:
         resp = requests.get(f"{self.base_url}/runs/{run_id}", headers=self.headers)
         resp.raise_for_status()
         return resp.json()["data"]["status"]
+    
+    def get_commands(self, run_id: str):
+        """Get the list of commands for a run."""
+        resp = requests.get(f"{self.base_url}/runs/{run_id}/commands", headers=self.headers)
+        resp.raise_for_status()
+
+        data = resp.json()["data"]
+
+        current = resp.json()["links"]["current"]["meta"]["commandId"]
+
+        commands = []
+
+        for cmd in data:
+            commands.append(cmd["id"])
+        return commands, current
+    
 
 
-    def run_protocol(self, protocol_path: str, custom_labware_folder: str = None):
+    def run_protocol(self, node, protocol_path: str, custom_labware_folder: str = None):
         """Upload, create, start, and monitor a protocol until completion."""
-        custom_labware = self.verify_labware(protocol_path, custom_labware_folder)
-        protocol_id = self.upload_protocol(protocol_path, custom_labware)
-        run_id = self.create_run(protocol_id)
-        
-        self.start_run(run_id)
+        custom_labware = self.verify_labware(node, protocol_path, custom_labware_folder)
+        protocol_id = self.upload_protocol(node, protocol_path, custom_labware)
+        run_id = self.create_run(node, protocol_id)
+        self.start_run(node, run_id)
         status = self.get_run_status(run_id)
-        print(status)
+        #print(status)
 
         return status, run_id
     

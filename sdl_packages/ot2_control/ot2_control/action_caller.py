@@ -22,9 +22,7 @@ class SimpleClient(Node):
         )
 
 
-    def stop_protocol_callback(self, request):
-        response = StopProtocol.Response()
-
+    def stop_protocol_callback(self, request, response):
         if hasattr(self, '_goal_handle') and self._goal_handle is not None:
             self.get_logger().info("StopProtocol service called — attempting to cancel goal.")
             self.cancel_goal()
