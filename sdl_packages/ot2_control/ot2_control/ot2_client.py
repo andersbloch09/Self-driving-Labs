@@ -140,20 +140,39 @@ class OT2Client:
         resp.raise_for_status()
         return resp.json()["data"]["status"]
     
-    def get_commands(self, run_id: str):
+    def get_commands(self, protocol_id: str, run_id: str):
         """Get the list of commands for a run."""
-        resp = requests.get(f"{self.base_url}/runs/{run_id}/commands", headers=self.headers)
-        resp.raise_for_status()
+        resp1 = requests.get(f"{self.base_url}/protocols/{protocol_id}", headers=self.headers)
 
-        data = resp.json()["data"]
+        analysis_id = resp1.json()["data"]["analysisSummaries"][0]["id"]
 
-        current = resp.json()["links"]["current"]["meta"]["commandId"]
+        resp = requests.get(f"{self.base_url}/protocols/{protocol_id}/analyses/{analysis_id}", headers=self.headers)
 
-        commands = []
+        data = resp.json()
 
-        for cmd in data:
-            commands.append(cmd["id"])
-        return commands, current
+        commands = data["data"]["commands"]
+
+        # Extract just the fields you want
+        results = [
+            {"id": cmd["id"], "commandType": cmd["commandType"]}
+            for cmd in commands
+        ]
+
+        resp2 = requests.get(f"{self.base_url}/runs/{run_id}/commands", headers=self.headers)
+        resp2.raise_for_status()
+
+        data = resp2.json()["data"]
+
+        current_command = data[-1]["id"]
+
+        #done_ids = [cmd["id"] for cmd in done_commands]
+
+        #current_command_no = len(done_ids)
+
+        total_commands = len(results)-3
+
+
+        return total_commands, current_command
     
 
 
@@ -166,7 +185,7 @@ class OT2Client:
         status = self.get_run_status(run_id)
         #print(status)
 
-        return status, run_id
+        return status, run_id, protocol_id
     
     
     def get_protocols(self):
