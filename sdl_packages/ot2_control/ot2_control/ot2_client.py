@@ -194,3 +194,25 @@ class OT2Client:
         resp.raise_for_status()
         return resp.json()["data"]
     
+    
+    def turn_lights_on(self):
+        """Turn the robot lights on """
+        resp = requests.post(
+            f"{self.base_url}/robot/lights",
+            headers=self.headers,
+            json={"on": True}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+
+    def turn_lights_off(self):
+        """Turn the robot lights off """
+        resp = requests.post(
+            f"{self.base_url}/robot/lights",
+            headers=self.headers,
+            json={"on": False}
+        )
+        resp.raise_for_status()
+        return resp.json()

@@ -48,6 +48,7 @@ class OT2Manager(Node):
         custom_labware_folder = goal_handle.request.custom_labware_folder
 
         # Example: start your OT2 run
+        self.lights = self.client.turn_lights_on()
         self.status, self.current_run_id, self.current_protocol_id = self.client.run_protocol(self, protocol_path, custom_labware_folder)
         self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
         done_commands = []
@@ -59,6 +60,7 @@ class OT2Manager(Node):
             if goal_handle.is_cancel_requested:
                 self.get_logger().info("Cancel requested — stopping OT-2 protocol...")
                 self.client.stop_run(self, self.current_run_id)
+                self.lights = self.client.turn_lights_off()
 
                 goal_handle.canceled()
                 result.message = "Cancelled via action"
@@ -112,7 +114,8 @@ class OT2Manager(Node):
             # Process pending callbacks once and sleep briefly
             rclpy.spin_once(self, timeout_sec=0.1)
             time.sleep(0.1)
-            
+
+        self.lights = self.client.turn_lights_off()
 
     def handle_goal(self, goal_request):
         if self.active_goal is not None:
