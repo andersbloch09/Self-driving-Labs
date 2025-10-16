@@ -34,9 +34,6 @@ class MirMissionActionServer(Node):
         
         try: 
             # Queue the mission
-            #feedback_msg.message = f"Queuing mission {goal_handle.request.mission_id}"
-            #goal_handle.publish_feedback(feedback_msg)
-            
             response = self.mir.post_to_mission_queue(self.mir_url, goal_handle.request.mission_id)
             
             # Wait for mission to complete
@@ -53,18 +50,9 @@ class MirMissionActionServer(Node):
                 
                 # Check mission status
                 mission_done = self.mir.get_mission_latest_mission_status(self.mir_url)
-                #status = self.mir.get_system_info(self.mir_url)
-                #queue = self.mir.get_mission_queue(self.mir_url)
-                
-                # current_x, current_y, current_orientation = self.mir.get_current_position(self.mir_url)
-                #feedback_msg.message = f"Mission in progress - State: {status.get('state_text', 'unknown')}, Queue: {len(queue)}"
-                #goal_handle.publish_feedback(feedback_msg)
-                
+    
                 # Check if mission is complete
                 if mission_done:
-                    #self.get_logger().info('Mission completed successfully!')
-                    #final_x, final_y, final_orientation = self.mir.get_current_position(self.mir_url)
-                    
                     goal_handle.succeed()
                     result.node_status = NodeStatus()
                     result.node_status.status = NodeStatus.SUCCESS
@@ -91,7 +79,6 @@ class MirMissionActionServer(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    
     action_server = MirMissionActionServer()
     
     try:
