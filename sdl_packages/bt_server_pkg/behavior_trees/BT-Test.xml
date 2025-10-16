@@ -1,12 +1,15 @@
  <root BTCPP_format="4" >
-     <BehaviorTree ID="MainTree">
+     <BehaviorTree ID="BT_Test">
         <Sequence name="root_sequence">
-            <GoToStorage   name="go_to_storage" 
-                          action_name="go_to_mission" />
-            <GoToOpenTrons2    name="go_to_opentrons2" 
-                              action_name="go_to_mission" />
-            <GoToHome name="go_to_home" 
-                     action_name="go_to_mission" />
+            <GoToMission   name="go_to_storage" 
+                          action_name="go_to_mission"
+                          mission_id="94c9f0cf-a4f7-11f0-b2e5-000e8e984489" />
+            <GoToMission    name="go_to_opentrons2" 
+                           action_name="go_to_mission"
+                           mission_id="a5c110d4-a4f7-11f0-b2e5-000e8e984489" />
+            <GoToMission name="go_to_home" 
+                        action_name="go_to_mission"
+                        mission_id="76638485-a4f7-11f0-b2e5-000e8e984489" />
         </Sequence>
      </BehaviorTree>
  </root>

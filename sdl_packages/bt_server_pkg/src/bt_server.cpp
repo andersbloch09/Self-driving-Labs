@@ -14,29 +14,15 @@ public:
     : TreeExecutionServer(std::make_shared<rclcpp::Node>("bt_action_server", options))
   {
     RCLCPP_INFO(node()->get_logger(), "MiR Behavior Tree Server initialized");
-    
-    // Let the TreeExecutionServer handle everything - don't interfere with its initialization
-    RCLCPP_INFO(node()->get_logger(), "TreeExecutionServer will handle plugin and BT file loading");
   }
 
 protected:
-  void registerNodesIntoFactory(BT::BehaviorTreeFactory& factory) override
-  {
-    // The action nodes are already registered via plugins (CreateRosNodePlugin)
-    // So we don't need to register them manually here
-    RCLCPP_INFO(node()->get_logger(), "Action nodes will be loaded automatically via plugins");
-  }
-
   void onTreeCreated(BT::Tree& tree) override
   {
     // Add a console logger to see what's happening
     logger_cout_ = std::make_shared<BT::StdCoutLogger>(tree);
     
-    // Skip Groot2 publisher - let external client handle monitoring
-    // External Groot2 client can connect directly to the behavior tree
-    
     RCLCPP_INFO(node()->get_logger(), "Behavior Tree created with console logging enabled");
-    RCLCPP_INFO(node()->get_logger(), "External Groot2 client should connect to port 1666 for monitoring");
   }
 
   std::optional<std::string> onTreeExecutionCompleted(BT::NodeStatus status,
@@ -76,13 +62,9 @@ private:
 int main(int argc, char* argv[])
 {
   rclcpp::init(argc, argv);
-
   rclcpp::NodeOptions options;
   auto action_server = std::make_shared<MirBehaviorTreeServer>(options);
-
   RCLCPP_INFO(action_server->node()->get_logger(), "MiR Behavior Tree Server starting...");
-  RCLCPP_INFO(action_server->node()->get_logger(), "Groot2 monitoring will be available once tree execution starts");
-
   // Use MultiThreadedExecutor to handle action clients properly
   rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), 0, false,
                                                 std::chrono::milliseconds(250));

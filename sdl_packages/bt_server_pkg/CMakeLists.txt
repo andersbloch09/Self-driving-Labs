@@ -18,113 +18,49 @@ find_package(behaviortree_ros2 REQUIRED)
 find_package(btcpp_ros2_interfaces REQUIRED)
 find_package(pluginlib REQUIRED)
 
-# Include directories
 include_directories(include)
 
-# Create action nodes as separate shared libraries (plugins)
-# Include the base class implementation in each plugin
-add_library(GoToStorage SHARED 
-  src/GoToStorage.cpp
-  src/mir_mission_action.cpp
-)
-add_library(GoToOpenTrons2 SHARED 
-  src/GoToOpenTrons2.cpp
-  src/mir_mission_action.cpp
-)
-add_library(GoToHome SHARED 
-  src/GoToHome.cpp
-  src/mir_mission_action.cpp
-)
+# Helper function to create plugins (DRY principle)
+function(create_bt_plugin plugin_name source_file)
+  add_library(${plugin_name} SHARED ${source_file} src/mir_mission_action.cpp)
+  set_target_properties(${plugin_name} PROPERTIES
+    CXX_VISIBILITY_PRESET default
+    VISIBILITY_INLINES_HIDDEN OFF
+  )
+  target_compile_definitions(${plugin_name} PRIVATE BT_PLUGIN_EXPORT)
+  ament_target_dependencies(${plugin_name} 
+    rclcpp rclcpp_action behaviortree_ros2 btcpp_ros2_interfaces pluginlib
+  )
+endfunction()
 
-# Set visibility for plugin exports
-set_target_properties(GoToStorage PROPERTIES
-  CXX_VISIBILITY_PRESET default
-  VISIBILITY_INLINES_HIDDEN OFF
-)
-set_target_properties(GoToOpenTrons2 PROPERTIES
-  CXX_VISIBILITY_PRESET default
-  VISIBILITY_INLINES_HIDDEN OFF
-)
-set_target_properties(GoToHome PROPERTIES
-  CXX_VISIBILITY_PRESET default
-  VISIBILITY_INLINES_HIDDEN OFF
-)
+# Create plugins using the helper
+create_bt_plugin(GoToMission src/GoToMission.cpp)
 
-# Define BT_PLUGIN_EXPORT for proper symbol export
-target_compile_definitions(GoToStorage PRIVATE BT_PLUGIN_EXPORT)
-target_compile_definitions(GoToOpenTrons2 PRIVATE BT_PLUGIN_EXPORT)
-target_compile_definitions(GoToHome PRIVATE BT_PLUGIN_EXPORT)
-
-ament_target_dependencies(GoToStorage
-  rclcpp
-  rclcpp_action
-  behaviortree_ros2
-  btcpp_ros2_interfaces
-  pluginlib
-)
-
-ament_target_dependencies(GoToOpenTrons2
-  rclcpp
-  rclcpp_action
-  behaviortree_ros2
-  btcpp_ros2_interfaces
-  pluginlib
-)
-
-ament_target_dependencies(GoToHome
-  rclcpp
-  rclcpp_action
-  behaviortree_ros2
-  btcpp_ros2_interfaces
-  pluginlib
-)
-
-# Create the main BT server executable
+# Main executable (simplified dependencies)
 add_executable(bt_server src/bt_server.cpp)
-
 ament_target_dependencies(bt_server
-  rclcpp
-  behaviortree_ros2
-  btcpp_ros2_interfaces
+  rclcpp behaviortree_ros2 btcpp_ros2_interfaces
 )
-
-# Link the action nodes libraries to the server
-target_link_libraries(bt_server GoToStorage GoToOpenTrons2 GoToHome)
 
 # Install targets
-install(TARGETS
-  bt_server
+install(TARGETS bt_server DESTINATION lib/${PROJECT_NAME})
+
+# Install plugin libraries
+install(TARGETS GoToMission
   DESTINATION lib/${PROJECT_NAME}
 )
-
-# Install plugins in share directory for TreeExecutionServer discovery
-install(TARGETS
-  GoToStorage
-  GoToOpenTrons2
-  GoToHome
+install(TARGETS GoToMission
   DESTINATION share/${PROJECT_NAME}/plugins
 )
 
-# Install Python scripts
-install(PROGRAMS
-  src/mir_mission_action_server.py
+install(PROGRAMS src/mir_mission_action_server.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install directories
-install(DIRECTORY
-  launch
-  config
-  behavior_trees
+install(DIRECTORY launch config behavior_trees include/
   DESTINATION share/${PROJECT_NAME}/
-)
-
-# Install include directory
-install(DIRECTORY include/
-  DESTINATION include/
 )
 
 # Plugin export
 pluginlib_export_plugin_description_file(behaviortree_ros2 plugins.xml)
-
 ament_package()

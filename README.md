@@ -62,3 +62,22 @@ cd supabase
 bash stop.sh
 ```
 
+
+
+# Mir BT example execution:
+
+Start by building the following packages using this command. The order is important:
+
+```bash
+colcon build --packages-select btcpp_ros2_interfaces behaviortree_ros2 mir bt_server_pkg
+```
+
+```bash
+source install/setup.bash && ros2 launch bt_server_pkg bt_server.launch.py
+```
+
+Make sure that the MiR is started, has sufficient battery life and is set to "Ready" with a green light emitting from the base. Make sure that the mir_api.py is configured correctly with authorization headers, and that the correct IP address is in Mir_mission_action_server.py
+
+```bash
+source install/setup.bash && ros2 action send_goal /bt_execution btcpp_ros2_interfaces/action/ExecuteTree "{target_tree: 'BT_Test'}" --feedback
+```
