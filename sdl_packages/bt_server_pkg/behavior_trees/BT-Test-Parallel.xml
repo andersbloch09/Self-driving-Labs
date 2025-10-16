@@ -1,0 +1,24 @@
+ <root BTCPP_format="4" >
+     <BehaviorTree ID="BT_Test_Parallel">
+        <Sequence name="root_sequence">
+            <!-- Phase 1: Go to storage and then to OpenTrons2 -->
+            <GoToMission   name="go_to_storage" 
+                          action_name="go_to_mission"
+                          mission_id="94c9f0cf-a4f7-11f0-b2e5-000e8e984489" />
+            <GoToMission    name="go_to_opentrons2" 
+                           action_name="go_to_mission"
+                           mission_id="a5c110d4-a4f7-11f0-b2e5-000e8e984489" />
+            
+            <!-- Phase 2: Start OpenTrons2 protocol and go home in parallel -->
+            <Parallel success_count="2" failure_count="1">
+                <OpenTrons2RunProtocol name="run_sample_protocol"
+                                     action_name="run_protocol"
+                                     custom_labware_folder="/home/sdl/sdl_ws/src/ot2_control/ot2_control/custom_labware"
+                                     protocol_path="/home/sdl/sdl_ws/src/ot2_control/ot2_control/protocols/Macro_cuvette_test.py" />
+                <GoToMission name="go_to_home" 
+                            action_name="go_to_mission"
+                            mission_id="76638485-a4f7-11f0-b2e5-000e8e984489" />
+            </Parallel>
+        </Sequence>
+     </BehaviorTree>
+ </root>

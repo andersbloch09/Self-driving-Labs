@@ -1,0 +1,10 @@
+ <root BTCPP_format="4" >
+     <BehaviorTree ID="BT_Test_OT">
+        <Sequence name="root_sequence">
+            <OpenTrons2RunProtocol name="run_sample_protocol"
+                            action_name="run_protocol"
+                            custom_labware_folder="/home/sdl/sdl_ws/src/ot2_control/ot2_control/custom_labware"
+                            protocol_path="/home/sdl/sdl_ws/src/ot2_control/ot2_control/protocols/Macro_cuvette_test.py" />
+        </Sequence>
+     </BehaviorTree>
+ </root>

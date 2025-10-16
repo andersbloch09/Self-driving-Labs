@@ -17,6 +17,14 @@ def generate_launch_description():
             output='screen'
         ),
         
+        # OpenTrons2 Manager (action server)
+        Node(
+            package='ot2_control',
+            executable='ot2_manager.py',
+            name='ot2_manager',
+            output='screen'
+        ),
+        
         # Behavior tree server
         Node(
             package='bt_server_pkg', 

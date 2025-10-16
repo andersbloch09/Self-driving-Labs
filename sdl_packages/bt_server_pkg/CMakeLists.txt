@@ -16,6 +16,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(behaviortree_ros2 REQUIRED)
 find_package(btcpp_ros2_interfaces REQUIRED)
+find_package(ot2_interfaces REQUIRED)
 find_package(pluginlib REQUIRED)
 
 include_directories(include)
@@ -33,8 +34,24 @@ function(create_bt_plugin plugin_name source_file)
   )
 endfunction()
 
-# Create plugins using the helper
+# Helper function for OpenTrons2 plugins
+function(create_ot2_bt_plugin plugin_name source_file)
+  add_library(${plugin_name} SHARED ${source_file})
+  set_target_properties(${plugin_name} PROPERTIES
+    CXX_VISIBILITY_PRESET default
+    VISIBILITY_INLINES_HIDDEN OFF
+  )
+  target_compile_definitions(${plugin_name} PRIVATE BT_PLUGIN_EXPORT)
+  ament_target_dependencies(${plugin_name} 
+    rclcpp rclcpp_action behaviortree_ros2 ot2_interfaces pluginlib
+  )
+endfunction()
+
+# Create MiR plugins
 create_bt_plugin(GoToMission src/GoToMission.cpp)
+
+# Create OpenTrons2 plugins
+create_ot2_bt_plugin(OpenTrons2RunProtocol src/opentrons2_run_protocol.cpp)
 
 # Main executable (simplified dependencies)
 add_executable(bt_server src/bt_server.cpp)
@@ -46,10 +63,10 @@ ament_target_dependencies(bt_server
 install(TARGETS bt_server DESTINATION lib/${PROJECT_NAME})
 
 # Install plugin libraries
-install(TARGETS GoToMission
+install(TARGETS GoToMission OpenTrons2RunProtocol
   DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS GoToMission
+install(TARGETS GoToMission OpenTrons2RunProtocol
   DESTINATION share/${PROJECT_NAME}/plugins
 )
 
