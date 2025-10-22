@@ -27,8 +27,6 @@ from launch.substitutions import Command, FindExecutable, LaunchConfiguration, P
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 import yaml
-from launch.actions import RegisterEventHandler, TimerAction
-from launch.event_handlers import OnProcessStart
 
 
 def load_yaml(package_name, file_path):
@@ -61,10 +59,8 @@ def generate_launch_description():
     )
 
     # planning_context
-    franka_xacro_file = os.path.join(get_package_share_directory('franka_description'),  
-                                    'robots', 
-                                    'real',
-                                    'panda_arm.urdf.xacro')
+    franka_xacro_file = os.path.join(get_package_share_directory('franka_description'), 'robots',
+                                     'panda_arm.urdf.xacro')
     robot_description_config = Command(
         [FindExecutable(name='xacro'), ' ', franka_xacro_file, ' hand:=', load_gripper,
          ' robot_ip:=', robot_ip, ' use_fake_hardware:=', use_fake_hardware,
@@ -85,33 +81,12 @@ def generate_launch_description():
     kinematics_yaml = load_yaml(
         'franka_moveit_config', 'config/kinematics.yaml'
     )
-    pilz_planning_yaml = load_yaml(
-        "franka_moveit_config", "config/pilz_industrial_motion_planner_planning.yaml"
-    )
-    joint_limits_yaml = load_yaml(
-        "franka_moveit_config", "config/joint_limits.yaml"
-    )
-    pilz_cartesian_limits_yaml = load_yaml(
-        "franka_moveit_config", "config/pilz_cartesian_limits.yaml"
-    )
 
-    ompl_planning_yaml = load_yaml(
-        'franka_moveit_config', 'config/ompl_planning.yaml'
-    )
-
-    # Add robot description planning (CRITICAL for timing issues)
-    robot_description_planning = {
-        "robot_description_planning": {
-            **joint_limits_yaml,
-            **pilz_cartesian_limits_yaml,
-        }
-    }
-
-    # Fix planning pipeline structure
+    # Planning Functionality
     ompl_planning_pipeline_config = {
         "default_planning_pipeline": "ompl",
         "planning_pipelines": ["ompl", "pilz_industrial_motion_planner"],
-        'ompl': {  # Remove 'move_group' wrapper
+        'ompl': {
             'planning_plugin': 'ompl_interface/OMPLPlanner',
             'request_adapters': 'default_planner_request_adapters/AddTimeOptimalParameterization '
                                 'default_planner_request_adapters/ResolveConstraintFrames '
@@ -127,11 +102,16 @@ def generate_launch_description():
             "start_state_max_bounds_error": 0.1,
         },
     }
-
-    
+    ompl_planning_yaml = load_yaml(
+        'franka_moveit_config', 'config/ompl_planning.yaml'
+    )
     ompl_planning_pipeline_config['ompl'].update(ompl_planning_yaml)
 
-        # Update pilz planner with its config
+    
+
+    pilz_planning_yaml = load_yaml(
+        "franka_moveit_config", "config/pilz_industrial_motion_planner_planning.yaml"
+    )
     ompl_planning_pipeline_config["pilz_industrial_motion_planner"].update(pilz_planning_yaml)
 
     # Trajectory Execution Functionality
@@ -146,22 +126,40 @@ def generate_launch_description():
 
     trajectory_execution = {
         'moveit_manage_controllers': True,
-        'trajectory_execution.allowed_execution_duration_scaling': 1.5,
-        'trajectory_execution.allowed_goal_duration_margin': 1.0,
-        'trajectory_execution.allowed_start_tolerance': 0.05,
+        'trajectory_execution.allowed_execution_duration_scaling': 1.2,
+        'trajectory_execution.allowed_goal_duration_margin': 0.5,
+        'trajectory_execution.allowed_start_tolerance': 0.01,
     }
 
     planning_scene_monitor_parameters = {
-    'publish_planning_scene': True,
-    'publish_geometry_updates': True,
-    'publish_state_updates': True,
-    'publish_transforms_updates': True,}
+        'publish_planning_scene': True,
+        'publish_geometry_updates': True,
+        'publish_state_updates': True,
+        'publish_transforms_updates': True,
+    }
 
     # Start the actual move_group node/action server
-    run_move_group_node = Node(
-        package='moveit_ros_move_group',
-        executable='move_group',
-        output='screen',
+    # run_move_group_node = Node(
+    #     package='moveit_ros_move_group',
+    #     executable='move_group',
+    #     output='screen',
+    #     parameters=[
+    #         robot_description,
+    #         robot_description_semantic,
+    #         kinematics_yaml,
+    #         ompl_planning_pipeline_config,
+    #         trajectory_execution,
+    #         moveit_controllers,
+    #         planning_scene_monitor_parameters,
+    #     ],
+    # )
+
+
+    move_server = Node(
+        name="move_robot_server",
+        package="manipulator",
+        executable="move_robot_server",
+        output="screen",
         parameters=[
             robot_description,
             robot_description_semantic,
@@ -170,107 +168,89 @@ def generate_launch_description():
             trajectory_execution,
             moveit_controllers,
             planning_scene_monitor_parameters,
-            robot_description_planning,
-            {'use_sim_time': False,
-             'planning_scene_monitor.joint_state_timeout': 5.0,
-            'planning_scene_monitor.tf_timeout': 5.0,
-            'move_group.joint_state_timeout': 5.0,
-            'move_group.state_monitor_timeout': 5.0,},
         ],
     )
 
-    # RViz
-    rviz_base = os.path.join(get_package_share_directory('franka_moveit_config'), 'rviz')
-    rviz_full_config = os.path.join(rviz_base, 'moveit.rviz')
 
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='log',
-        arguments=['-d', rviz_full_config],
-        parameters=[
-            robot_description,
-            robot_description_semantic,
-            ompl_planning_pipeline_config,
-            kinematics_yaml,
-        ],
-    )
+    # # RViz
+    # rviz_base = os.path.join(get_package_share_directory('franka_moveit_config'), 'rviz')
+    # rviz_full_config = os.path.join(rviz_base, 'moveit.rviz')
 
-    # Publish TF
-    robot_state_publisher = Node(
-    package='robot_state_publisher',
-    executable='robot_state_publisher',
-    name='robot_state_publisher',
-    output='both',
-    parameters=[
-        robot_description,
-        {
-            'use_sim_time': False,
-            'publish_frequency': 30.0,        # Increase from default 20.0
-            'ignore_timestamp': True,         # Fix the timing issue!
-            'frame_prefix': '',
-        }
-    ],
-    )
+    # rviz_node = Node(
+    #     package='rviz2',
+    #     executable='rviz2',
+    #     name='rviz2',
+    #     output='log',
+    #     arguments=['-d', rviz_full_config],
+    #     parameters=[
+    #         robot_description,
+    #         robot_description_semantic,
+    #         ompl_planning_pipeline_config,
+    #         kinematics_yaml,
+    #     ],
+    # )
 
+    # # Publish TF
+    # robot_state_publisher = Node(
+    #     package='robot_state_publisher',
+    #     executable='robot_state_publisher',
+    #     name='robot_state_publisher',
+    #     output='both',
+    #     parameters=[robot_description],
+    # )
 
-    ros2_controllers_path = os.path.join(
-        get_package_share_directory('franka_moveit_config'),
-        'config',
-        'panda_ros_controllers.yaml',
-    )
-    ros2_control_node = Node(
-        package='controller_manager',
-        executable='ros2_control_node',
-        parameters=[robot_description, ros2_controllers_path],
-        remappings=[('joint_states', 'franka/joint_states')],
-        output={
-            'stdout': 'screen',
-            'stderr': 'screen',
-        },
-        on_exit=Shutdown(),
-    )
+    # ros2_controllers_path = os.path.join(
+    #     get_package_share_directory('franka_moveit_config'),
+    #     'config',
+    #     'panda_ros_controllers.yaml',
+    # )
+    # ros2_control_node = Node(
+    #     package='controller_manager',
+    #     executable='ros2_control_node',
+    #     parameters=[robot_description, ros2_controllers_path],
+    #     remappings=[('joint_states', 'franka/joint_states')],
+    #     output={
+    #         'stdout': 'screen',
+    #         'stderr': 'screen',
+    #     },
+    #     on_exit=Shutdown(),
+    # )
 
-    # Load controllers
-    load_controllers = []
-    for controller in ['panda_arm_controller', 'joint_state_broadcaster']:
-        load_controllers += [
-            ExecuteProcess(
-                cmd=['ros2 run controller_manager spawner {}'.format(controller)],
-                shell=True,
-                output='screen',
-            )
-        ]
+    # # Load controllers
+    # load_controllers = []
+    # for controller in ['panda_arm_controller', 'joint_state_broadcaster']:
+    #     load_controllers += [
+    #         ExecuteProcess(
+    #             cmd=['ros2 run controller_manager spawner {}'.format(controller)],
+    #             shell=True,
+    #             output='screen',
+    #         )
+    #     ]
 
-    # Warehouse mongodb server
-    db_config = LaunchConfiguration('db')
-    mongodb_server_node = Node(
-        package='warehouse_ros_mongo',
-        executable='mongo_wrapper_ros.py',
-        parameters=[
-            {'warehouse_port': 33829},
-            {'warehouse_host': 'localhost'},
-            {'warehouse_plugin': 'warehouse_ros_mongo::MongoDatabaseConnection'},
-        ],
-        output='screen',
-        condition=IfCondition(db_config)
-    )
+    # # Warehouse mongodb server
+    # db_config = LaunchConfiguration('db')
+    # mongodb_server_node = Node(
+    #     package='warehouse_ros_mongo',
+    #     executable='mongo_wrapper_ros.py',
+    #     parameters=[
+    #         {'warehouse_port': 33829},
+    #         {'warehouse_host': 'localhost'},
+    #         {'warehouse_plugin': 'warehouse_ros_mongo::MongoDatabaseConnection'},
+    #     ],
+    #     output='screen',
+    #     condition=IfCondition(db_config)
+    # )
 
-    joint_state_publisher = Node(
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        name='joint_state_publisher',
-        parameters=[
-            {'source_list': ['franka/joint_states', 'panda_gripper/joint_states'], 
-             'rate': 500,
-             'use_sim_time': False,
-             'publish_default_positions': False,
-            'publish_default_velocities': False,
-            'publish_default_efforts': False,},]
-    )
+    # joint_state_publisher = Node(
+    #     package='joint_state_publisher',
+    #     executable='joint_state_publisher',
+    #     name='joint_state_publisher',
+    #     parameters=[
+    #         {'source_list': ['franka/joint_states', 'panda_gripper/joint_states'], 'rate': 30}],
+    # )
     robot_arg = DeclareLaunchArgument(
         robot_ip_parameter_name,
+        default_value='false',
         description='Hostname or IP address of the robot.')
 
     use_fake_hardware_arg = DeclareLaunchArgument(
@@ -295,41 +275,13 @@ def generate_launch_description():
                           use_fake_hardware_parameter_name: use_fake_hardware}.items(),
         condition=IfCondition(load_gripper)
     )
-
-
-    manipulation_node = Node(
-    package='manipulation',
-    executable='manipulation',
-    name='manipulator',
-    output='screen',
-    parameters=[
-        robot_description,
-        robot_description_semantic,
-        kinematics_yaml,
-        ompl_planning_pipeline_config,
-        robot_description_planning,
-        planning_scene_monitor_parameters,
-        {
-            'use_sim_time': False,
-        }
-    ]
-    )
-
     return LaunchDescription(
-        [robot_arg,
+        [   
+            robot_arg,
          use_fake_hardware_arg,
          fake_sensor_commands_arg,
          load_gripper_arg,
-         db_arg,
-         rviz_node,
-         robot_state_publisher,
-         run_move_group_node,
-         ros2_control_node,
-         mongodb_server_node,
-         joint_state_publisher,
-         gripper_launch_file,
-         manipulation_node
+            move_server
          ]
-        + load_controllers
+        # + load_controllers
     )
-    
