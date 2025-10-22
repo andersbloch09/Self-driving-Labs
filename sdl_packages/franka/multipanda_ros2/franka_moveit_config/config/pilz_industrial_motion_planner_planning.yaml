@@ -1,0 +1,7 @@
+default_planner_config:
+  planning_time_limit: 5.0
+  max_workspace_size: 10.0
+pilz_industrial_motion_planner:
+  planning_plugin: "pilz_industrial_motion_planner/CommandPlanner"
+  request_adapters: ""
+  start_state_max_bounds_error: 0.1
