@@ -21,7 +21,7 @@
         "--cap-add=SYS_NICE",
         "--ulimit", "rtprio=99",
         "--ulimit", "memlock=-1",
-        "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+        //"--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
         "--env=DISPLAY",
         "--ipc=host",
         "--cap-add=SYS_PTRACE",
@@ -32,14 +32,14 @@
     ],
     "hostRequirements": {
         "gpu": "optional"
-    },
+    },/*
     "containerEnv": {
         "DISPLAY": "${localEnv:DISPLAY}",
         "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
         "XDG_RUNTIME_DIR": "${localEnv:XDG_RUNTIME_DIR}",
         "PULSE_SERVER": "${localEnv:PULSE_SERVER}",
         "GAZEBO_MASTER_URI": "http://localhost:11345"
-    },
+    },*/
     "customizations": {
         "vscode": {
             "extensions": [
