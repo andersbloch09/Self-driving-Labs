@@ -1,14 +1,17 @@
  <root BTCPP_format="4" >
-     <BehaviorTree ID="BT_Test_Parallel">
+     <BehaviorTree ID="BT_Test_Parallel_with_Franka">
         <Sequence name="root_sequence">
             <!-- Phase 1: Go to storage and then to OpenTrons2 -->
             <GoToMission   name="go_to_storage" 
                           action_name="go_to_mission"
                           mission_id="94c9f0cf-a4f7-11f0-b2e5-000e8e984489" />
+            <FrankaAction name="franka_move_square"
+                             action_name="move_in_square" />
             <GoToMission    name="go_to_opentrons2" 
                            action_name="go_to_mission"
                            mission_id="a5c110d4-a4f7-11f0-b2e5-000e8e984489" />
-            
+            <FrankaAction name="franka_move_square"
+                             action_name="move_in_square" />
             <!-- Phase 2: Start OpenTrons2 protocol and go home in parallel -->
             <Parallel success_count="2" failure_count="1">
                 <OpenTrons2RunProtocol name="run_sample_protocol"
