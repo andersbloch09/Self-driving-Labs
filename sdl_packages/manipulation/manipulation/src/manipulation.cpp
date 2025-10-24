@@ -11,9 +11,13 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 
+#include <moveit/trajectory_processing/iterative_time_parameterization.h>
+
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <control_msgs/action/follow_joint_trajectory.hpp>
 
 #include <vector>
 #include <cmath>
@@ -69,7 +73,6 @@ bool allClose(const geometry_msgs::msg::PoseStamped& goal, const geometry_msgs::
     return allClose(goal.pose, actual.pose, tolerance);
 }
 
-
 class Manipulator
 {
 public:
@@ -91,7 +94,8 @@ public:
     
     // Create MoveGroupInterface with shared pointer like move_robot_server
     move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, PLANNING_GROUP);
-    
+    gripper_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, "hand");
+
     // Configure MoveIt exactly like move_robot_server
     move_group_->setPoseReferenceFrame(base_link);
     move_group_->setPlanningTime(PLANNING_TIME_S);
@@ -119,11 +123,26 @@ public:
       RCLCPP_INFO(logger_, "  Joint %zu: %.3f", i, joints[i]);
     }
     
+    /*
     // Do a  movement
     RCLCPP_INFO(logger_, "🤖 Moving robot...");
-    moveRelativeToFrame("panda_hand_tcp", {0.1, 0.0, 0.0});  // Move 10cm in X direction
-    rclcpp::sleep_for(std::chrono::seconds(1));
-    moveRelativeToFrame("panda_hand_tcp", {0.0, 0.0, 0.1});
+    // Move in a square in the TCP frame (each side 10cm)
+    const double step = 0.1;
+    const int repeats = 10; // number of squares to perform
+    for (int r = 0; r < repeats; ++r) {
+      // +X
+      planCartesianPath("panda_hand_tcp", {step, 0.0, 0.0, 0.0, 0.0, 0.0});
+      rclcpp::sleep_for(std::chrono::seconds(1));
+      // +Y
+      planCartesianPath("panda_hand_tcp", {0.0, step, 0.0, 0.0, 0.0, 0.0});
+      rclcpp::sleep_for(std::chrono::seconds(1));
+      // -X
+      planCartesianPath("panda_hand_tcp", {-step, 0.0, 0.0, 0.0, 0.0, 0.0});
+      rclcpp::sleep_for(std::chrono::seconds(1));
+      // -Y
+      planCartesianPath("panda_hand_tcp", {0.0, -step, 0.0, 0.0, 0.0, 0.0});
+      rclcpp::sleep_for(std::chrono::seconds(1));
+    }*/
 
     // Get pose after movement
     auto final_pose = move_group_->getCurrentPose();
@@ -135,23 +154,14 @@ public:
   ~Manipulator() {
     // Clean up executor thread
     if (executor_thread_.joinable()) {
-      executor_->cancel();
+      //executor_->cancel();
       executor_thread_.join();
     }
   }
 
-private:
-  // Print pose helper (like in move_robot_server)
-  void printPose(const geometry_msgs::msg::PoseStamped& pose) {
-    RCLCPP_INFO(logger_, "Current Pose:");
-    RCLCPP_INFO(logger_, "  Position: [%.3f, %.3f, %.3f]", 
-               pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
-    RCLCPP_INFO(logger_, "  Orientation: [%.3f, %.3f, %.3f, %.3f]",
-               pose.pose.orientation.x, pose.pose.orientation.y, 
-               pose.pose.orientation.z, pose.pose.orientation.w);
-  }
-  
-  std::pair<bool, bool> moveRelativeToFrame(
+rclcpp::Node::SharedPtr getNode() const { return node_; }
+
+std::pair<bool, bool> moveRelativeToFrame(
     const std::string& frame_id,
     const std::vector<double>& pos = {0, 0, 0, 0, 0, 0}) 
   {
@@ -204,15 +214,251 @@ private:
   }
 
 
-  // Member variables 
+  bool planCartesianPath(
+    const std::string& frame_name,
+    const std::vector<double>& pos,
+    bool avoid_collisions = true)
+{
+    // --- Waypoint and transform (same as before) ---
+    geometry_msgs::msg::PoseStamped wpose;
+    wpose.header.frame_id = frame_name;
+    wpose.pose.position.x = pos[0];
+    wpose.pose.position.y = pos[1];
+    wpose.pose.position.z = pos[2];
+    tf2::Quaternion q;
+    q.setRPY(pos[3], pos[4], pos[5]);
+    wpose.pose.orientation = tf2::toMsg(q);
+
+    geometry_msgs::msg::PoseStamped transformed_pose;
+    try {
+        transformed_pose = tf_buffer_->transform(wpose, move_group_->getPlanningFrame(), tf2::durationFromSec(1.0));
+    } catch (const tf2::TransformException& ex) {
+        RCLCPP_ERROR(logger_, "Transform failed: %s", ex.what());
+        return false;
+    }
+
+    std::vector<geometry_msgs::msg::Pose> waypoints;
+    waypoints.push_back(transformed_pose.pose);
+
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    double eef_step = 0.005;
+    double jump_threshold = 0.0;
+
+    double fraction = move_group_->computeCartesianPath(
+        waypoints, eef_step, jump_threshold, trajectory, avoid_collisions);
+
+    if (fraction < 0.99) {
+        RCLCPP_WARN(logger_, "Cartesian path only %.2f%% complete", fraction * 100.0);
+    } else {
+        RCLCPP_INFO(logger_, "Cartesian path computed successfully (%.2f%%)", fraction * 100.0);
+    }
+
+    // --- Retiming the trajectory ---
+    robot_trajectory::RobotTrajectory rt(move_group_->getCurrentState()->getRobotModel(), PLANNING_GROUP);
+    rt.setRobotTrajectoryMsg(*move_group_->getCurrentState(), trajectory);
+
+    trajectory_processing::IterativeParabolicTimeParameterization time_param;
+    if (!time_param.computeTimeStamps(rt, MAX_VELOCITY_SCALE, MAX_ACCELERATION_SCALE)) {
+        RCLCPP_WARN(logger_, "Failed to retime trajectory!");
+    }
+
+    // Update plan with retimed trajectory
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    rt.getRobotTrajectoryMsg(plan.trajectory_);
+
+    // Execute at scaled velocity
+    bool success = (move_group_->execute(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    if (!success) {
+        RCLCPP_ERROR(logger_, "Failed to execute Cartesian path!");
+    }
+
+    return success;
+}
+
+bool MoveGripper(double left_joint, double right_joint)
+{
+  std::vector<double> joints = {left_joint, right_joint};
+  std::vector<std::string> joint_names = {"panda_finger_joint1", "panda_finger_joint2"};
+
+  gripper_group_->setJointValueTarget(joint_names, joints);
+
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  bool success = (gripper_group_->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+
+  RCLCPP_INFO(logger_, "Gripper move plan %s", success ? "succeeded" : "failed");
+
+  if (success) {
+    gripper_group_->execute(plan);
+    return true;
+  }
+  return false;
+}
+
+private:
+  // Print pose helper (like in move_robot_server)
+  void printPose(const geometry_msgs::msg::PoseStamped& pose) {
+    RCLCPP_INFO(logger_, "Current Pose:");
+    RCLCPP_INFO(logger_, "  Position: [%.3f, %.3f, %.3f]", 
+               pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
+    RCLCPP_INFO(logger_, "  Orientation: [%.3f, %.3f, %.3f, %.3f]",
+               pose.pose.orientation.x, pose.pose.orientation.y, 
+               pose.pose.orientation.z, pose.pose.orientation.w);
+  }
+  
+
+  // Member variables
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;
+  std::shared_ptr<moveit::planning_interface::MoveGroupInterface> gripper_group_;
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::thread executor_thread_;
 };
+
+
+class ActionsManager
+{
+public:
+  using MoveInSquare = control_msgs::action::FollowJointTrajectory;
+  using GoalHandleMoveInSquare = rclcpp_action::ServerGoalHandle<MoveInSquare>;
+
+  using PickObject = control_msgs::action::FollowJointTrajectory;
+  using GoalHandlePickObject = rclcpp_action::ServerGoalHandle<PickObject>;
+
+  explicit ActionsManager(std::shared_ptr<Manipulator> manip)
+  : manip_(manip),
+    node_(manip->getNode()),
+    logger_(node_->get_logger())
+  {
+    using namespace std::placeholders;
+
+    // ---- Action: move_in_square ----
+    move_in_square_server_ = rclcpp_action::create_server<MoveInSquare>(
+      node_,
+      "move_in_square",
+      std::bind(&ActionsManager::handle_goal_move_in_square, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_move_in_square, this, _1),
+      std::bind(&ActionsManager::handle_accepted_move_in_square, this, _1)
+    );
+
+    // ---- Action: pick_object ----
+    pick_object_server_ = rclcpp_action::create_server<PickObject>(
+      node_,
+      "pick_object",
+      std::bind(&ActionsManager::handle_goal_pick_object, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_pick_object, this, _1),
+      std::bind(&ActionsManager::handle_accepted_pick_object, this, _1)
+    );
+
+    RCLCPP_INFO(logger_, "✅ ActionsManager ready — actions: [/move_in_square], [/pick_object]");
+  }
+
+private:
+  // =====================================================
+  // 1️⃣ move_in_square ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_move_in_square(
+    const rclcpp_action::GoalUUID &,
+    std::shared_ptr<const MoveInSquare::Goal>)
+  {
+    RCLCPP_INFO(logger_, "Received goal for /move_in_square");
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  }
+
+  rclcpp_action::CancelResponse handle_cancel_move_in_square(
+    const std::shared_ptr<GoalHandleMoveInSquare>)
+  {
+    RCLCPP_INFO(logger_, "Cancel request received for /move_in_square");
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void handle_accepted_move_in_square(const std::shared_ptr<GoalHandleMoveInSquare> goal_handle)
+  {
+    std::thread([this, goal_handle]() {
+      auto result = std::make_shared<MoveInSquare::Result>();
+      bool success = move_in_square();
+
+      result->error_code = success ? 0 : -1;
+      result->error_string = success ? "Trajectory executed successfully" : "Trajectory failed";
+
+      if (success)
+        goal_handle->succeed(result);
+      else
+        goal_handle->abort(result);
+    }).detach();
+  }
+
+  bool move_in_square()
+  {
+    RCLCPP_INFO(logger_, "🤖 Executing move_in_square...");
+    for (int i = 0; i < 2; ++i)
+    {
+      manip_->planCartesianPath("panda_hand_tcp", { 0.1,  0.0, 0.0, 0, 0, 0 });
+      manip_->MoveGripper(0.1, 0.1); // open
+      manip_->planCartesianPath("panda_hand_tcp", { 0.0,  0.1, 0.0, 0, 0, 0 });
+      manip_->MoveGripper(0.0, 0.0); // close
+      manip_->planCartesianPath("panda_hand_tcp", {-0.1,  0.0, 0.0, 0, 0, 0 });
+      manip_->MoveGripper(0.1, 0.1); // open
+      manip_->planCartesianPath("panda_hand_tcp", { 0.0, -0.1, 0.0, 0, 0, 0 });
+      manip_->MoveGripper(0.0, 0.0); // close
+    }
+    return true;
+  }
+
+  // =====================================================
+  // 2️⃣ pick_object ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_pick_object(
+    const rclcpp_action::GoalUUID &,
+    std::shared_ptr<const PickObject::Goal>)
+  {
+    RCLCPP_INFO(logger_, "Received goal for /pick_object");
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  }
+
+  rclcpp_action::CancelResponse handle_cancel_pick_object(
+    const std::shared_ptr<GoalHandlePickObject>)
+  {
+    RCLCPP_INFO(logger_, "Cancel request received for /pick_object");
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void handle_accepted_pick_object(const std::shared_ptr<GoalHandlePickObject> goal_handle)
+  {
+    std::thread([this, goal_handle]() {
+      auto result = std::make_shared<PickObject::Result>();
+      bool success = pick_object();
+
+      result->error_code = success ? 0 : -1;
+      result->error_string = success ? "Pick completed successfully" : "Pick failed";
+
+      if (success)
+        goal_handle->succeed(result);
+      else
+        goal_handle->abort(result);
+    }).detach();
+  }
+
+  bool pick_object()
+  {
+    RCLCPP_INFO(logger_, "📦 Executing pick_object...");
+    manip_->moveRelativeToFrame("panda_hand_tcp", { 0.0, 0.0, -0.1, 0, 0, 0 }); // lower
+    manip_->moveRelativeToFrame("panda_hand_tcp", { 0.0, 0.0,  0.1, 0, 0, 0 }); // lift
+    return true;
+  }
+
+  // =====================================================
+  // Members
+  // =====================================================
+  std::shared_ptr<Manipulator> manip_;
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Logger logger_;
+  rclcpp_action::Server<MoveInSquare>::SharedPtr move_in_square_server_;
+  rclcpp_action::Server<PickObject>::SharedPtr pick_object_server_;
+};
+
 
 int main(int argc, char * argv[])
 {
@@ -220,17 +466,27 @@ int main(int argc, char * argv[])
   
   // Wait for system to be ready
   rclcpp::sleep_for(std::chrono::seconds(5));
+
   
-  {
-    Manipulator manipulator;
-    // Keep the node alive for a bit to see the results
-    rclcpp::sleep_for(std::chrono::seconds(2));
-  }
+  // Initialize manipulator interface
+  auto manipulator = std::make_shared<Manipulator>();
+
+
+  // Create ActionsManager (action server node)
+  auto actions_manager = std::make_shared<ActionsManager>(manipulator);
   
+
+  auto spin_blocker = std::make_shared<rclcpp::Node>("spin_blocker");
+  rclcpp::spin(spin_blocker);
+
+
+  RCLCPP_INFO(manipulator->getNode()->get_logger(), "🧹 Shutting down cleanly...");
+
+  // --- stop the manipulator's executor thread properly ---
+  manipulator.reset();  // triggers Manipulator destructor → joins executor thread
+
   rclcpp::shutdown();
   return 0;
 }
-
-
 
 
