@@ -36,12 +36,10 @@ class OT2Manager(Node):
 
 
     # ---------- ACTION CALLBACKS ----------
-
-
     def execute_callback(self, goal_handle):
-        self.get_logger().info(f"Executing goal: {goal_handle.request.protocol_path}")
+        # self.get_logger().info(f"Executing goal: {goal_handle.request.protocol_path}")
         self.active_goal = goal_handle
-        print("The active goal is:   ", self.active_goal)
+        # print("The active goal is:   ", self.active_goal)
         result = RunProtocol.Result()
 
         protocol_path = goal_handle.request.protocol_path
@@ -50,7 +48,7 @@ class OT2Manager(Node):
         # Example: start your OT2 run
         self.lights = self.client.turn_lights_on()
         self.status, self.current_run_id, self.current_protocol_id = self.client.run_protocol(self, protocol_path, custom_labware_folder)
-        self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
+        # self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
         done_commands = []
         while rclpy.ok():
             # Check external stop or client cancel
@@ -68,32 +66,14 @@ class OT2Manager(Node):
                 self.active_goal = None
                 return result
 
-
             current_status = self.client.get_run_status(self.current_run_id)
-
             total_commands, current_command = self.client.get_commands(self.current_protocol_id, self.current_run_id)
-            
 
             if current_command not in done_commands:
                 done_commands.append(current_command)
-
             command_no = len(done_commands)
-
-            #print("First command ID: ", commands[0]["id"])
-            #print("Current command ID: ", current)
-            #command_no = 0
-
-            #print([cmd["id"] for cmd in commands])
-
-
-            #for i, cmd in enumerate(commands):  # assuming your list is called 'commands'
-            #    if cmd["id"] == current:
-            #        command_no = i + 1 
-            #        break
-             #command_no = commands.index(current) + 1
-            #total_commands = len(commands)
-            progress = ("Performing command " + str(command_no) + " of " + str(total_commands))
-
+            progressPercent = (command_no/total_commands)*100.0
+            progress = ("Protocol Completion: " + str(round(progressPercent, 1)) + "%")
 
             #Check if OT-2 finished normally
             if current_status == "succeeded":

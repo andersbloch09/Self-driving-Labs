@@ -113,7 +113,8 @@ USER root
 RUN pip install requests \
                 dotenv \
                 vcstool \
-                pyrealsense2
+                pyrealsense2 \
+                opentrons
 
 # Auto-source ROS 2 environment
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
