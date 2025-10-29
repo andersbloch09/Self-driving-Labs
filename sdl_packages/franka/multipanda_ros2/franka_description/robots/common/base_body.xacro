@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="base_body">
+
+  <!-- Macro definition -->
+  <!--
+       connected_to: optional parent link name
+       xyz/rpy: transform of the base mesh relative to the parent
+  -->
+  <xacro:macro name="base_body" params="connected_to:='' xyz:='0 0 0' rpy:='0 0 0'">
+
+    <!-- Only create a joint if a parent link is specified -->
+    <xacro:unless value="${connected_to == ''}">
+      <joint name="base_body_joint" type="fixed">
+        <parent link="${connected_to}"/>
+        <child link="base_body"/>
+        <origin xyz="${xyz}" rpy="${rpy}"/>
+      </joint>
+    </xacro:unless>
+
+    <!-- Base body link -->
+    <link name="base_body">
+
+      <!-- Visual (for RViz display) -->
+      <visual>
+        <origin xyz="0 -0.02 0" rpy="3.1415926536 0 0"/>
+        <geometry>
+          <mesh filename="package://franka_description/meshes/visual/base_body.stl"/>
+        </geometry>
+        <material name="DarkGrey"/>
+      </visual>
+
+      <!-- Collision (for MoveIt, optional) -->
+      <collision>
+        <origin xyz="0 -0.02 0" rpy="3.1415926536 0 0"/>
+        <geometry>
+          <mesh filename="package://franka_description/meshes/visual/base_body.stl"/>
+        </geometry>
+      </collision>
+
+    </link>
+
+    <!-- Material definition -->
+    <material name="DarkGrey">
+      <color rgba="0.1 0.1 0.15 1.0"/>
+    </material>
+
+  </xacro:macro>
+
+</robot>
