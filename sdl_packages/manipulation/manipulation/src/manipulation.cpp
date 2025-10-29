@@ -5,6 +5,10 @@
 #include <rclcpp/executors/single_threaded_executor.hpp>
 
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <geometric_shapes/shape_operations.h>
+#include <moveit_msgs/msg/collision_object.hpp>
+
 
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -96,6 +100,12 @@ public:
     move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, PLANNING_GROUP);
     gripper_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, "hand");
 
+    // =====================================================
+    // Add static environment (base and camera) to the scene
+    // =====================================================
+    moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+
+
     // Configure MoveIt exactly like move_robot_server
     move_group_->setPoseReferenceFrame(base_link);
     move_group_->setPlanningTime(PLANNING_TIME_S);
@@ -122,27 +132,6 @@ public:
     for (size_t i = 0; i < joints.size(); ++i) {
       RCLCPP_INFO(logger_, "  Joint %zu: %.3f", i, joints[i]);
     }
-    
-    /*
-    // Do a  movement
-    RCLCPP_INFO(logger_, "🤖 Moving robot...");
-    // Move in a square in the TCP frame (each side 10cm)
-    const double step = 0.1;
-    const int repeats = 10; // number of squares to perform
-    for (int r = 0; r < repeats; ++r) {
-      // +X
-      planCartesianPath("panda_hand_tcp", {step, 0.0, 0.0, 0.0, 0.0, 0.0});
-      rclcpp::sleep_for(std::chrono::seconds(1));
-      // +Y
-      planCartesianPath("panda_hand_tcp", {0.0, step, 0.0, 0.0, 0.0, 0.0});
-      rclcpp::sleep_for(std::chrono::seconds(1));
-      // -X
-      planCartesianPath("panda_hand_tcp", {-step, 0.0, 0.0, 0.0, 0.0, 0.0});
-      rclcpp::sleep_for(std::chrono::seconds(1));
-      // -Y
-      planCartesianPath("panda_hand_tcp", {0.0, -step, 0.0, 0.0, 0.0, 0.0});
-      rclcpp::sleep_for(std::chrono::seconds(1));
-    }*/
 
     // Get pose after movement
     auto final_pose = move_group_->getCurrentPose();
@@ -160,6 +149,39 @@ public:
   }
 
 rclcpp::Node::SharedPtr getNode() const { return node_; }
+
+
+void addCollisionMesh(
+    const std::string& object_id,
+    const std::string& mesh_path,
+    const geometry_msgs::msg::Pose& pose,
+    const std::string& frame_id = "panda_link0")
+{
+  moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+  moveit_msgs::msg::CollisionObject object;
+  object.id = object_id;
+  object.header.frame_id = frame_id;
+
+  shapes::Mesh* mesh = shapes::createMeshFromResource(mesh_path);
+  if (!mesh)
+  {
+    RCLCPP_ERROR(logger_, "❌ Failed to load mesh: %s", mesh_path.c_str());
+    return;
+  }
+
+  shapes::ShapeMsg mesh_msg;
+  shapes::constructMsgFromShape(mesh, mesh_msg);
+  shape_msgs::msg::Mesh mesh_converted = boost::get<shape_msgs::msg::Mesh>(mesh_msg);
+
+  object.meshes.push_back(mesh_converted);
+  object.mesh_poses.push_back(pose);
+  object.operation = moveit_msgs::msg::CollisionObject::ADD;
+
+  planning_scene_interface.applyCollisionObjects({object});
+
+  RCLCPP_INFO(logger_, "✅ Added object [%s] to planning scene", object_id.c_str());
+}
+
 
 std::pair<bool, bool> moveRelativeToFrame(
     const std::string& frame_id,
