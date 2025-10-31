@@ -99,17 +99,41 @@ class OT2Client:
         return protocol_id
 
 
-    def create_run(self, node, protocol_id: str) -> str:
+    def create_run(self, node, protocol_id: str, parameters: dict = {}) -> str:
         """Create a run for the given protocol. Returns run_id."""
+
+        run_body = {
+            "data": {
+                "protocolId": protocol_id,
+                #"labwareOffsets": [],
+                "runTimeParameterValues": parameters,
+                #"runtimeParameterFiles": {}
+            }
+        }
+
         resp = requests.post(
             f"{self.base_url}/runs",
             headers=self.headers,
-            json={"data": {"protocolId": protocol_id}}
+            json=run_body
         )
         resp.raise_for_status()
         run_id = resp.json()["data"]["id"]
         node.get_logger().info(f"Created run ID: {run_id}")
         return run_id
+    
+    def get_labware_used(self, protocol_id: str, run_id: str):
+        """Get the list of labware for a run."""
+        resp1 = requests.get(f"{self.base_url}/protocols/{protocol_id}", headers=self.headers)
+
+        analysis_id = resp1.json()["data"]["analysisSummaries"][0]["id"]
+
+        resp = requests.get(f"{self.base_url}/protocols/{protocol_id}/analyses/{analysis_id}", headers=self.headers)
+
+        data = resp.json()
+
+        labware = data["data"]["labware"]
+
+        return labware
 
 
     def start_run(self, node, run_id: str):
@@ -152,9 +176,10 @@ class OT2Client:
 
         commands = data["data"]["commands"]
 
+
         # Extract just the fields you want
         results = [
-            {"id": cmd["id"], "commandType": cmd["commandType"]}
+            {"id": cmd["id"], "commandType": cmd["commandType"], "params": cmd["params"]}
             for cmd in commands
         ]
 
@@ -169,10 +194,10 @@ class OT2Client:
 
         #current_command_no = len(done_ids)
 
-        total_commands = len(results)-3
+        #total_commands = len(results)-3
 
 
-        return total_commands, current_command
+        return results, current_command
     
 
 
@@ -181,11 +206,12 @@ class OT2Client:
         custom_labware = self.verify_labware(node, protocol_path, custom_labware_folder)
         protocol_id = self.upload_protocol(node, protocol_path, custom_labware)
         run_id = self.create_run(node, protocol_id)
+        labware = self.get_labware_used(protocol_id, run_id)
         self.start_run(node, run_id)
         status = self.get_run_status(run_id)
         #print(status)
 
-        return status, run_id, protocol_id
+        return status, run_id, protocol_id, labware
     
     
     def get_protocols(self):
@@ -216,3 +242,12 @@ class OT2Client:
         )
         resp.raise_for_status()
         return resp.json()
+    
+
+    def blink_lights(self, times: int, interval: float):
+        """Blink the robot lights a number of times with a given interval."""
+        for _ in range(times):
+            self.turn_lights_on()
+            time.sleep(interval)
+            self.turn_lights_off()
+            time.sleep(interval)
