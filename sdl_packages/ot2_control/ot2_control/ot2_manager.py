@@ -37,12 +37,10 @@ class OT2Manager(Node):
 
 
     # ---------- ACTION CALLBACKS ----------
-
-
     def execute_callback(self, goal_handle):
-        self.get_logger().info(f"Executing goal: {goal_handle.request.protocol_path}")
+        # self.get_logger().info(f"Executing goal: {goal_handle.request.protocol_path}")
         self.active_goal = goal_handle
-        print("The active goal is:   ", self.active_goal)
+        # print("The active goal is:   ", self.active_goal)
         result = RunProtocol.Result()
 
         protocol_path = goal_handle.request.protocol_path
@@ -70,7 +68,6 @@ class OT2Manager(Node):
                 self.active_goal = None
                 return result
 
-
             current_status = self.client.get_run_status(self.current_run_id)
 
             results, current_command = self.client.get_commands(self.current_protocol_id, self.current_run_id)
@@ -80,10 +77,9 @@ class OT2Manager(Node):
 
             if current_command not in done_commands:
                 done_commands.append(current_command)
-
             command_no = len(done_commands)
-            progress = ("Performing command " + str(command_no) + " of " + str(total_commands))
-
+            progressPercent = (command_no/total_commands)*100.0
+            progress = ("Protocol Completion: " + str(round(progressPercent, 1)) + "%")
 
             #Check if OT-2 finished normally
             if current_status == "succeeded":

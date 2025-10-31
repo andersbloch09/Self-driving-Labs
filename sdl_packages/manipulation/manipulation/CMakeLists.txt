@@ -16,6 +16,8 @@ find_package(moveit_visual_tools REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(rclcpp_action REQUIRED) 
+find_package(control_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -34,6 +36,7 @@ add_executable(manipulation src/manipulation.cpp)
 
 ament_target_dependencies(manipulation
   rclcpp
+  rclcpp_action
   moveit_ros_planning_interface
   moveit_ros_planning
   moveit_core
@@ -41,6 +44,7 @@ ament_target_dependencies(manipulation
   geometry_msgs
   tf2_ros
   tf2_geometry_msgs
+  control_msgs
 )
 
 install(TARGETS

@@ -6,8 +6,28 @@
   <xacro:arg name="use_fake_hardware" default="false"/>
   <xacro:arg name="fake_sensor_commands" default="false"/>
 
+ 
+  
+
   <xacro:include filename="$(find franka_description)/robots/common/panda_arm.xacro"/>
   <xacro:panda_arm arm_id="$(arg arm_id)" safety_distance="0.03"/>
+
+  
+  <xacro:include filename="$(find franka_description)/robots/common/camera_mount.xacro"/>
+  
+ 
+  <xacro:camera_mount connected_to="$(arg arm_id)_hand_tcp"
+                      xyz="0.031 0 -0.095"
+                      rpy="0 0 ${pi/2}"/>
+
+
+  <!-- Include the base body macro -->
+  <xacro:include filename="$(find franka_description)/robots/common/base_body.xacro"/>
+
+  <!-- Attach base_body to the root of the robot -->
+  <xacro:base_body connected_to="$(arg arm_id)_link0" xyz="0.23 -0.1 -0.683" rpy="0 0 0"/>
+
+
 
   <xacro:if value="$(arg hand)">
     <xacro:include filename="$(find franka_description)/robots/common/hand.xacro"/>
