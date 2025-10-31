@@ -23,17 +23,31 @@ rosidl_generate_interfaces(${PROJECT_NAME}
     std_msgs
 )
 
+# Add library for database functions
+add_library(database_functions SHARED src/database_functions.cpp)
+target_include_directories(database_functions PUBLIC 
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${PQXX_INCLUDE_DIRS} 
+  ${PQ_INCLUDE_DIRS}
+)
+ament_target_dependencies(database_functions rclcpp std_msgs)
+target_link_libraries(database_functions ${PQXX_LIBRARIES} ${PQ_LIBRARIES})
+
 # Add executables
 add_executable(database_service src/database_service.cpp)
 add_executable(database_client src/database_client.cpp)
+add_executable(interactive_database_test src/interactive_database_test.cpp)
 
 # Add dependencies for executables
 ament_target_dependencies(database_service rclcpp std_msgs)
 ament_target_dependencies(database_client rclcpp std_msgs)
+ament_target_dependencies(interactive_database_test rclcpp std_msgs)
 
 # Link PostgreSQL libraries
 target_link_libraries(database_service ${PQXX_LIBRARIES} ${PQ_LIBRARIES})
 target_link_libraries(database_client ${PQXX_LIBRARIES} ${PQ_LIBRARIES})
+target_link_libraries(interactive_database_test database_functions)
 
 # Add include directories
 target_include_directories(database_service PRIVATE ${PQXX_INCLUDE_DIRS} ${PQ_INCLUDE_DIRS})
@@ -44,11 +58,26 @@ rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typ
 target_link_libraries(database_service "${cpp_typesupport_target}")
 target_link_libraries(database_client "${cpp_typesupport_target}")
 
-# Install executables
+# Install library and executables
+install(TARGETS
+  database_functions
+  EXPORT database_functionsTargets
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
 install(TARGETS
   database_service
   database_client
+  interactive_database_test
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install header files
+install(DIRECTORY include/
+  DESTINATION include
 )
 
 if(BUILD_TESTING)
@@ -64,4 +93,6 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_dependencies(rosidl_default_runtime)
+ament_export_targets(database_functionsTargets HAS_LIBRARY_TARGET)
+ament_export_include_directories(include)
 ament_package()

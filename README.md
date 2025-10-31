@@ -81,3 +81,20 @@ Make sure that the MiR is started, has sufficient battery life and is set to "Re
 ```bash
 source install/setup.bash && ros2 action send_goal /bt_execution btcpp_ros2_interfaces/action/ExecuteTree "{target_tree: 'BT_Test'}" --feedback
 ```
+
+# Test database interaction functions
+
+Start by ensuring that the supabase docker has been started by running start.sh in the supabase directory
+
+Then build the database_service_pkg with the following command:
+```bash
+colcon build --packages-select database_service_pkg
+```
+
+Then run the node with:
+```bash
+source install/setup.bash && ros2 run database_service_pkg interactive_database_test
+```
+
+There are instructions printed in the terminal for usage of the testing tool, but it shows how the general implementation.
+It is recommended to open the database og http://localhost:8000 to monitor how the rows are manipulated through the functions.
