@@ -50,7 +50,6 @@ class OT2Manager(Node):
         self.lights = self.client.turn_lights_on()
         self.status, self.current_run_id, self.current_protocol_id, self.labware = self.client.run_protocol(self, protocol_path, custom_labware_folder)
         self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
-        print(json.dumps(self.labware, indent=2))
         done_commands = []
         while rclpy.ok():
             # Check external stop or client cancel
