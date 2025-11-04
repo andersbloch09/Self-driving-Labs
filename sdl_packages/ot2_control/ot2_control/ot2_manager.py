@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from ot2_control.ot2_client import OT2Client
-from ot2_interfaces.action import RunProtocol
+from ot2_interfaces.action import RunProtocol, InitializeProtocol
 import time
 import asyncio
 import json
@@ -22,8 +22,16 @@ class OT2Manager(Node):
         self.status = None
         self.active_goal = None
 
+        self.init_action_server = ActionServer(
+            self,
+            InitializeProtocol,              # your custom .action
+            'initialize_protocol',            # name of the action
+            execute_callback=self.init_execute_callback,
+            goal_callback=self.handle_init_goal,
+            cancel_callback=self.handle_init_cancel
+        )
 
-        self.action_server = ActionServer(
+        self.run_action_server = ActionServer(
             self,
             RunProtocol,
             'run_protocol',
@@ -37,6 +45,51 @@ class OT2Manager(Node):
 
 
     # ---------- ACTION CALLBACKS ----------
+    def init_execute_callback(self, goal_handle):
+        self.get_logger().info("Initializing OT-2 protocol...")
+        self.active_goal = goal_handle
+        result = InitializeProtocol.Result()
+
+        protocol_path = goal_handle.request.protocol_path
+        custom_labware_folder = goal_handle.request.custom_labware_folder
+
+        # Example: perform initialization
+        init_success = True
+        custom_labware = self.client.verify_labware(self, protocol_path, custom_labware_folder)
+        protocol_id = self.client.upload_protocol(self, protocol_path, custom_labware)
+        run_id = self.client.create_run(self, protocol_id)
+        labware = self.client.get_labware_used(protocol_id, run_id)
+        print(json.dumps(labware, indent=2))
+
+        if init_success:
+            self.get_logger().info("OT-2 protocol initialized successfully.")
+            goal_handle.succeed()
+            result.success = True
+            result.message = "Initialization successful"
+            result.labware_list = labware
+            result.run_id = run_id
+        else:
+            self.get_logger().error("OT-2 protocol initialization failed.")
+            goal_handle.succeed()
+            result.success = False
+            result.message = "Initialization failed"
+            result.labware_list = []
+
+        return result
+
+    def handle_init_goal(self, goal_request):
+        if self.active_goal is not None:
+            self.get_logger().warn("Rejecting new goal: another goal is already active.")
+            return GoalResponse.REJECT
+        self.get_logger().info(f"Accepting new goal: {goal_request.protocol_path}")
+        return GoalResponse.ACCEPT
+
+    def handle_init_cancel(self, goal_handle):
+        self.get_logger().info("Cancel request received.")
+        return CancelResponse.ACCEPT
+
+
+
     def execute_callback(self, goal_handle):
         # self.get_logger().info(f"Executing goal: {goal_handle.request.protocol_path}")
         self.active_goal = goal_handle

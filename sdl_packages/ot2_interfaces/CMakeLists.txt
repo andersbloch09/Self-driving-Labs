@@ -9,6 +9,9 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(action_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+find_package(std_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -25,16 +28,22 @@ endif()
 
 set(action_files
   "action/RunProtocol.action"
+  "action/InitializeProtocol.action"
 )
 
 set(srv_files
   "srv/StopProtocol.srv"
 )
 
+set(msg_files
+  "msg/Labware.msg"
+)
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${action_files}
   ${srv_files}
+  ${msg_files}
+  DEPENDENCIES action_msgs std_msgs builtin_interfaces
 )
-
 
 ament_package()

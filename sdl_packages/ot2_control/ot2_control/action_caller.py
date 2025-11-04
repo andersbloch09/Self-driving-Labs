@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 import os
-from ot2_interfaces.action import RunProtocol
+from ot2_interfaces.action import RunProtocol, InitializeProtocol
 from ot2_interfaces.srv import StopProtocol
 
 

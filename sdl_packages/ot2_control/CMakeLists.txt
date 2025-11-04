@@ -15,6 +15,7 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   ot2_control/ot2_manager.py
   ot2_control/action_caller.py
+  ot2_control/init_caller.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

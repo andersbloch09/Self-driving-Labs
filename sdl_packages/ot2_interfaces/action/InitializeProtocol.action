@@ -7,6 +7,8 @@ string custom_labware_folder
 bool success
 string message
 string final_status
+Labware[] labware_list
+string run_id
 
 ---
 # Feedback
