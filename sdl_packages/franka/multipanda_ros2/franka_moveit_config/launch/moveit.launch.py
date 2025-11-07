@@ -315,6 +315,18 @@ def generate_launch_description():
     ]
     )
 
+    handeye_tf = Node(
+    package='tf2_ros',
+    executable='static_transform_publisher',
+    name='handeye_static_tf',
+    arguments=[
+        '0.0330697', '-0.0315952', '-0.0617017',   # x y z
+        '0.01175291', '0.00551283', '0.71613336', '0.69784244',  # qx qy qz qw
+        'panda_hand_tcp', 'camera_link_calibrated'  # parent, child
+        ]
+    )
+
+
     return LaunchDescription(
         [robot_arg,
          use_fake_hardware_arg,
@@ -323,6 +335,7 @@ def generate_launch_description():
          db_arg,
          rviz_node,
          robot_state_publisher,
+         handeye_tf,
          run_move_group_node,
          ros2_control_node,
          mongodb_server_node,

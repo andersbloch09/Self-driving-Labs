@@ -29,10 +29,7 @@
         "--network=host",
         "--privileged",
         "--device=/dev/bus/usb",
-        "--device=/dev/video0",
-        "--device=/dev/video1",
-        "--device=/dev/video2",
-        "--device=/dev/video3"
+        "--device-cgroup-rule=c 81:* rmw"
     ],
     "hostRequirements": {
         "gpu": "optional"

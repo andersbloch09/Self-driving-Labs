@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+            schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+
+  <name>aruco_detector</name>
+  <version>0.0.1</version>
+  <description>A ROS2 Humble ArUco detection service with TF publishing.</description>
+
+  <maintainer email="andersbloch09@gmail.com">Anders Bloch</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- Core ROS2 Python -->
+  <exec_depend>rclpy</exec_depend>
+
+  <!-- TF2 -->
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>tf2_py</exec_depend>
+
+  <!-- Your custom messages (ArucoDetect.srv) -->
+  <exec_depend>custom_msgs</exec_depend>
+
+  <!-- Standard messages -->
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+
+  <!-- Image conversion -->
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+
+  <!-- OpenCV + ArUco -->
+  <exec_depend>opencv_python</exec_depend>
+
+  <!-- Used for quaternion_from_matrix -->
+  <exec_depend>python3-tf-transformations</exec_depend>
+
+  <!-- Optional build / test dependencies -->
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+
+</package>

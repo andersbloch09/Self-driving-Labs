@@ -326,7 +326,6 @@ private:
                pose.pose.orientation.x, pose.pose.orientation.y, 
                pose.pose.orientation.z, pose.pose.orientation.w);
   }
-  
 
   // Member variables
   rclcpp::Node::SharedPtr node_;
@@ -346,8 +345,11 @@ public:
   using MoveInSquare = control_msgs::action::FollowJointTrajectory;
   using GoalHandleMoveInSquare = rclcpp_action::ServerGoalHandle<MoveInSquare>;
 
-  using PickObject = control_msgs::action::FollowJointTrajectory;
-  using GoalHandlePickObject = rclcpp_action::ServerGoalHandle<PickObject>;
+  using MoveBoxPosOnRobot = control_msgs::action::FollowJointTrajectory;
+  using GoalHandleMoveBoxPosOnRobot = rclcpp_action::ServerGoalHandle<MoveBoxPosOnRobot>;
+
+  using CameraCalibration = control_msgs::action::FollowJointTrajectory;
+  using GoalHandleCalibration = rclcpp_action::ServerGoalHandle<CameraCalibration>;
 
   explicit ActionsManager(std::shared_ptr<Manipulator> manip)
   : manip_(manip),
@@ -365,13 +367,21 @@ public:
       std::bind(&ActionsManager::handle_accepted_move_in_square, this, _1)
     );
 
-    // ---- Action: pick_object ----
-    pick_object_server_ = rclcpp_action::create_server<PickObject>(
+    camera_calibration = rclcpp_action::create_server<CameraCalibration>(
       node_,
-      "pick_object",
-      std::bind(&ActionsManager::handle_goal_pick_object, this, _1, _2),
-      std::bind(&ActionsManager::handle_cancel_pick_object, this, _1),
-      std::bind(&ActionsManager::handle_accepted_pick_object, this, _1)
+      "camera_calibration",
+      std::bind(&ActionsManager::handle_goal_camera_calibration, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_camera_calibration, this, _1),
+      std::bind(&ActionsManager::handle_accepted_camera_calibration, this, _1)
+    );
+
+    // ---- Action: move_box_pos_on_robot ----
+    move_box_pos_on_robot_server_ = rclcpp_action::create_server<MoveBoxPosOnRobot>(
+      node_,
+      "move_box_pos_on_robot",
+      std::bind(&ActionsManager::handle_goal_move_box_pos_on_robot, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_move_box_pos_on_robot, this, _1),
+      std::bind(&ActionsManager::handle_accepted_move_box_pos_on_robot, this, _1)
     );
 
     RCLCPP_INFO(logger_, "✅ ActionsManager ready — actions: [/move_in_square], [/pick_object]");
@@ -379,7 +389,7 @@ public:
 
 private:
   // =====================================================
-  // 1️⃣ move_in_square ACTION
+  //move_in_square ACTION
   // =====================================================
   rclcpp_action::GoalResponse handle_goal_move_in_square(
     const rclcpp_action::GoalUUID &,
@@ -428,33 +438,76 @@ private:
     }
     return true;
   }
+  // =====================================================
+  // camera_calibration ACTION
+  // =====================================================
 
-  // =====================================================
-  // 2️⃣ pick_object ACTION
-  // =====================================================
-  rclcpp_action::GoalResponse handle_goal_pick_object(
+  rclcpp_action::GoalResponse handle_goal_camera_calibration(
     const rclcpp_action::GoalUUID &,
-    std::shared_ptr<const PickObject::Goal>)
+    std::shared_ptr<const CameraCalibration::Goal>)
   {
-    RCLCPP_INFO(logger_, "Received goal for /pick_object");
+    RCLCPP_INFO(logger_, "Received goal for /camera_calibration");
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
-  rclcpp_action::CancelResponse handle_cancel_pick_object(
-    const std::shared_ptr<GoalHandlePickObject>)
+  rclcpp_action::CancelResponse handle_cancel_camera_calibration(
+    const std::shared_ptr<GoalHandleCalibration>)
   {
-    RCLCPP_INFO(logger_, "Cancel request received for /pick_object");
+    RCLCPP_INFO(logger_, "Cancel request received for /camera_calibration");
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
-  void handle_accepted_pick_object(const std::shared_ptr<GoalHandlePickObject> goal_handle)
+  void handle_accepted_camera_calibration(const std::shared_ptr<GoalHandleCalibration> goal_handle)
   {
     std::thread([this, goal_handle]() {
-      auto result = std::make_shared<PickObject::Result>();
-      bool success = pick_object();
+      auto result = std::make_shared<CameraCalibration::Result>();
+      bool success = calibrate_camera(); 
 
       result->error_code = success ? 0 : -1;
-      result->error_string = success ? "Pick completed successfully" : "Pick failed";
+      result->error_string = success ? "Calibration completed successfully" : "Calibration failed";
+
+      if (success)
+        goal_handle->succeed(result);
+      else
+        goal_handle->abort(result);
+    }).detach();
+  }
+  bool calibrate_camera()
+  {
+    RCLCPP_INFO(logger_, "Executing camera calibration...");
+    
+    
+
+
+    return true;
+  }
+
+  // =====================================================
+  // move_box_pos_on_robot ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_move_box_pos_on_robot(
+    const rclcpp_action::GoalUUID &,
+    std::shared_ptr<const MoveBoxPosOnRobot::Goal>)
+  {
+    RCLCPP_INFO(logger_, "Received goal for /move_box_pos_on_robot");
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  }
+
+  rclcpp_action::CancelResponse handle_cancel_move_box_pos_on_robot(
+    const std::shared_ptr<GoalHandleMoveBoxPosOnRobot>)
+  {
+    RCLCPP_INFO(logger_, "Cancel request received for /move_box_pos_on_robot");
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void handle_accepted_move_box_pos_on_robot(const std::shared_ptr<GoalHandleMoveBoxPosOnRobot> goal_handle)
+  {
+    std::thread([this, goal_handle]() {
+      auto result = std::make_shared<MoveBoxPosOnRobot::Result>();
+      bool success = move_box_pos_on_robot();
+
+      result->error_code = success ? 0 : -1;
+      result->error_string = success ? "Move completed successfully" : "Move failed";
 
       if (success)
         goal_handle->succeed(result);
@@ -463,11 +516,27 @@ private:
     }).detach();
   }
 
-  bool pick_object()
+  bool move_box_pos_on_robot()
   {
-    RCLCPP_INFO(logger_, "📦 Executing pick_object...");
-    manip_->moveRelativeToFrame("panda_hand_tcp", { 0.0, 0.0, -0.1, 0, 0, 0 }); // lower
-    manip_->moveRelativeToFrame("panda_hand_tcp", { 0.0, 0.0,  0.1, 0, 0, 0 }); // lift
+    RCLCPP_INFO(logger_, "📦 Executing move_box_pos_on_robot...");
+
+    std::vector<double> orientation = {1.000, 0.004, 0.001, -0.001};
+
+    // conversion to roll-pitch-yaw
+    tf2::Quaternion q(orientation[0], orientation[1], orientation[2], orientation[3]);
+    double roll, pitch, yaw;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+    manip_->MoveGripper(0.04, 0.04); // open
+    manip_->moveRelativeToFrame("panda_link0", {0.538, -0.024, 0.108, roll, pitch, yaw});
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, 0.05, 0, 0, 0}); 
+    manip_->MoveGripper(0.033, 0.033); // close
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, -0.1, 0, 0, 0}); 
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, -0.117, 0, 0, 0, 0}); 
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, 0.1, 0, 0, 0}); 
+    manip_->MoveGripper(0.04, 0.04); // open
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, -0.1, 0, 0, 0}); 
+    manip_->moveRelativeToFrame("panda_link0", {0.538, -0.024, 0.108, roll, pitch, yaw});
+
     return true;
   }
 
@@ -478,7 +547,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
   rclcpp_action::Server<MoveInSquare>::SharedPtr move_in_square_server_;
-  rclcpp_action::Server<PickObject>::SharedPtr pick_object_server_;
+  rclcpp_action::Server<MoveBoxPosOnRobot>::SharedPtr move_box_pos_on_robot_server_;
 };
 
 
