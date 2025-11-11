@@ -11,7 +11,9 @@ import cv2.aruco as aruco
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PoseStamped, Quaternion
+from geometry_msgs.msg import PoseStamped, Quaternion, TransformStamped
+from tf2_ros import StaticTransformBroadcaster
+
 
 from aruco_interfaces.srv import ArucoDetect
 
@@ -24,10 +26,11 @@ class ArucoDetector:
         self.node = node
         self.bridge = CvBridge()
 
-        # ✅ Image topic (adjust if needed)
+        # Image topic (adjust if needed)
         self.image_topic = "/camera/camera/color/image_raw"
 
-        # ✅ Your RealSense intrinsics
+        # Your RealSense intrinsics
+
         self.camera_matrix = np.array([
             [907.1922312613871, 0.0,                646.733835502371],
             [0.0,                907.7231897656274, 392.47462991366143],
@@ -42,12 +45,21 @@ class ArucoDetector:
             0.0
         ], dtype=np.float32)
 
-        # ✅ Marker size in meters
-        self.marker_size = 0.05   # CHANGE THIS!
+        # Marker size in meters (ADJUST THIS!)
+        self.marker_size = 0.05
 
-        # ✅ ArUco dictionary
+        # Number of measurements to average
+        self.num_scans = 20
+
+        # Calibrated camera frame name
+        self.camera_frame = "camera_link_calibrated"
+
+        # ArUco dictionary
         self.aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_50)
         self.parameters = cv2.aruco.DetectorParameters_create()
+
+        # Static TF broadcaster
+        self.static_broadcaster = StaticTransformBroadcaster(node)
 
     # -----------------------------------------------------------------
     def wait_for_image(self, timeout=1.0):
@@ -68,8 +80,32 @@ class ArucoDetector:
         return msg_container["msg"]
 
     # -----------------------------------------------------------------
+    def transform_pose_to_world(self, rvec_cam, tvec_cam):
+        """
+        Transform from OpenCV optical frame (X=right, Y=down, Z=forward)
+        to ROS camera frame (X=forward, Y=left, Z=up).
+        
+        This matches the transformation from your old working detector.
+        """
+        R_wc = np.array([[0,  0,  1],
+                        [-1, 0,  0],
+                        [0, -1,  0]], dtype=float)
+
+        # Convert rvec to rotation matrix
+        R_cam, _ = cv2.Rodrigues(rvec_cam.reshape(3,))
+        t_cam = tvec_cam.reshape(3,)
+
+        # Transform to world (ROS camera frame)
+        R_world = R_wc @ R_cam
+        t_world = R_wc @ t_cam
+
+        # Convert back to rvec
+        rvec_world, _ = cv2.Rodrigues(R_world)
+        return rvec_world.reshape(3,), t_world.reshape(3,)
+
+    # -----------------------------------------------------------------
     def detect_single(self, image):
-        """Detect ID + 6DOF pose."""
+        """Detect a single ArUco marker and return its ID, rvec, tvec."""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         corners, ids, _ = aruco.detectMarkers(
@@ -81,6 +117,7 @@ class ArucoDetector:
 
         marker_id = int(ids[0][0])
 
+        # Estimate pose in OpenCV optical frame
         rvec, tvec, _ = aruco.estimatePoseSingleMarkers(
             corners[0],
             self.marker_size,
@@ -91,22 +128,30 @@ class ArucoDetector:
         rvec = rvec[0][0]
         tvec = tvec[0][0]
 
-        return marker_id, rvec, tvec
+        # Transform to ROS camera frame convention
+        rvec_world, tvec_world = self.transform_pose_to_world(rvec, tvec)
+
+        return marker_id, rvec_world, tvec_world
 
     # -----------------------------------------------------------------
     def rvec_to_quaternion(self, rvec):
-        """Convert Rodrigues rvec to quaternion."""
+        """Convert Rodrigues rotation vector to quaternion [x, y, z, w]."""
         R, _ = cv2.Rodrigues(rvec)
 
+        # Build 4x4 transformation matrix for quaternion extraction
+        T = np.eye(4)
+        T[:3, :3] = R
+
+        # Extract quaternion using the standard algorithm
         q = np.empty((4,), dtype=np.float64)
         t = np.trace(R)
 
         if t > 0:
             s = np.sqrt(1.0 + t) * 2
-            q[3] = 0.25 * s
-            q[0] = (R[2,1] - R[1,2]) / s
-            q[1] = (R[0,2] - R[2,0]) / s
-            q[2] = (R[1,0] - R[0,1]) / s
+            q[3] = 0.25 * s  # w
+            q[0] = (R[2,1] - R[1,2]) / s  # x
+            q[1] = (R[0,2] - R[2,0]) / s  # y
+            q[2] = (R[1,0] - R[0,1]) / s  # z
         else:
             i = np.argmax([R[0,0], R[1,1], R[2,2]])
             if i == 0:
@@ -128,16 +173,140 @@ class ArucoDetector:
                 q[1] = (R[1,2] + R[2,1]) / s
                 q[2] = 0.25 * s
 
-        return q
+        # Normalize
+        norm = np.linalg.norm(q)
+        if norm > 0:
+            q = q / norm
+
+        return q  # [x, y, z, w]
 
     # -----------------------------------------------------------------
-    def process(self):
-        msg = self.wait_for_image(timeout=1.0)
-        if msg is None:
-            return None
+    def average_quaternions(self, quaternions):
+        """
+        Average multiple quaternions using the method from:
+        "Averaging Quaternions" by F. Landis Markley et al.
+        
+        Args:
+            quaternions: list of numpy arrays [x, y, z, w]
+        
+        Returns:
+            averaged quaternion [x, y, z, w]
+        """
+        if len(quaternions) == 1:
+            return quaternions[0]
 
-        img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        return self.detect_single(img)
+        # Build matrix M
+        M = np.zeros((4, 4))
+        for q in quaternions:
+            q = q.reshape(4, 1)
+            M += q @ q.T
+
+        M = M / len(quaternions)
+
+        # Find eigenvector corresponding to largest eigenvalue
+        eigenvalues, eigenvectors = np.linalg.eigh(M)
+        max_idx = np.argmax(eigenvalues)
+        q_avg = eigenvectors[:, max_idx]
+
+        # Normalize
+        q_avg = q_avg / np.linalg.norm(q_avg)
+
+        return q_avg
+
+    # -----------------------------------------------------------------
+    def publish_marker_frame(self, marker_pose, frame_name):
+        """Publish static TF transform for the detected marker."""
+        t = TransformStamped()
+        t.header.stamp = self.node.get_clock().now().to_msg()
+        t.header.frame_id = marker_pose.header.frame_id
+        t.child_frame_id = frame_name
+        
+        t.transform.translation.x = marker_pose.pose.position.x
+        t.transform.translation.y = marker_pose.pose.position.y
+        t.transform.translation.z = marker_pose.pose.position.z
+        t.transform.rotation = marker_pose.pose.orientation
+        
+        self.static_broadcaster.sendTransform(t)
+        self.node.get_logger().info(f"Published static TF: {frame_name}")
+
+    # -----------------------------------------------------------------
+    def detect_and_average(self):
+        """
+        Take multiple measurements of ArUco marker pose and average them.
+        Returns averaged PoseStamped and marker ID, or None if no detection.
+        """
+        poses = []
+        ids_detected = []
+
+        self.node.get_logger().info(f"Taking {self.num_scans} measurements...")
+
+        for i in range(self.num_scans):
+            # Wait for image
+            msg = self.wait_for_image(timeout=1.0)
+            if msg is None:
+                self.node.get_logger().warn(f"Scan {i+1}/{self.num_scans}: No image received")
+                continue
+
+            # Convert to OpenCV
+            try:
+                img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            except Exception as e:
+                self.node.get_logger().warn(f"Scan {i+1}/{self.num_scans}: Image conversion failed: {e}")
+                continue
+
+            # Detect marker
+            result = self.detect_single(img)
+            if result is None:
+                self.node.get_logger().warn(f"Scan {i+1}/{self.num_scans}: No marker detected")
+                continue
+
+            marker_id, rvec, tvec = result
+            
+            # Convert to quaternion
+            quat = self.rvec_to_quaternion(rvec)
+
+            # Store results
+            poses.append({
+                'position': tvec,
+                'quaternion': quat
+            })
+            ids_detected.append(marker_id)
+            
+            self.node.get_logger().info(f"Scan {i+1}/{self.num_scans}: Marker ID {marker_id} detected")
+
+        # Check if we got any detections
+        if not poses:
+            self.node.get_logger().warn("No markers detected in any scan")
+            return None, -1
+
+        # Average positions (simple median)
+        positions = np.array([p['position'] for p in poses])
+        median_pos = np.median(positions, axis=0)
+
+        # Average quaternions
+        quaternions = [p['quaternion'] for p in poses]
+        avg_quat = self.average_quaternions(quaternions)
+
+        # Build final PoseStamped
+        final_pose = PoseStamped()
+        final_pose.header.stamp = self.node.get_clock().now().to_msg()
+        final_pose.header.frame_id = self.camera_frame
+        
+        final_pose.pose.position.x = float(median_pos[0])
+        final_pose.pose.position.y = float(median_pos[1])
+        final_pose.pose.position.z = float(median_pos[2])
+        
+        final_pose.pose.orientation.x = float(avg_quat[0])
+        final_pose.pose.orientation.y = float(avg_quat[1])
+        final_pose.pose.orientation.z = float(avg_quat[2])
+        final_pose.pose.orientation.w = float(avg_quat[3])
+
+        marker_id = ids_detected[0]  # Assume same marker detected each time
+
+        self.node.get_logger().info(f"Averaged {len(poses)} measurements for marker ID {marker_id}")
+        self.node.get_logger().info(f"Position: [{median_pos[0]:.3f}, {median_pos[1]:.3f}, {median_pos[2]:.3f}]")
+
+        return final_pose, marker_id
 
 
 # =====================================================================
@@ -145,10 +314,11 @@ class ArucoDetector:
 # =====================================================================
 class ArucoDetectorNode(Node):
     def __init__(self):
-        super().__init__("arucodetector_node")
+        super().__init__("aruco_detector_node")
 
         self.detector = ArucoDetector(self)
 
+        # Create service
         self.srv = self.create_service(
             ArucoDetect,
             "aruco_detect",
@@ -156,32 +326,41 @@ class ArucoDetectorNode(Node):
             callback_group=ReentrantCallbackGroup()
         )
 
-        self.get_logger().info("✅ ArucoDetect service ready (FULL 6DOF POSE).")
+        self.get_logger().info("    ArUco Detection Service Ready")
+        self.get_logger().info(f"   Service: /aruco_detect")
+        self.get_logger().info(f"   Camera frame: {self.detector.camera_frame}")
+        self.get_logger().info(f"   Image topic: {self.detector.image_topic}")
+        self.get_logger().info(f"   Marker size: {self.detector.marker_size} m")
+        self.get_logger().info(f"   Averaging {self.detector.num_scans} measurements")
 
     # -----------------------------------------------------------------
     def handle_service(self, request, response):
-        result = self.detector.process()
+        """
+        Service callback: detect ArUco marker, average multiple measurements,
+        publish TF, and return the pose.
+        """
+        self.get_logger().info("ArUco detection service called")
 
-        if result is None:
+        # Detect and average multiple measurements
+        final_pose, marker_id = self.detector.detect_and_average()
+
+        if final_pose is None:
+            # No detection
             response.id = -1
             response.pose = PoseStamped()
+            self.get_logger().warn("No ArUco marker detected")
             return response
 
-        marker_id, rvec, tvec = result
+        # Publish static TF transform
+        frame_name = f"aruco_marker_{marker_id}"
+        self.detector.publish_marker_frame(final_pose, frame_name)
 
-        pose = PoseStamped()
-        pose.header.stamp = self.get_clock().now().to_msg()
-        pose.header.frame_id = "camera_link_calibrated"
-
-        pose.pose.position.x = float(tvec[0])
-        pose.pose.position.y = float(tvec[1])
-        pose.pose.position.z = float(tvec[2])
-
-        q = self.detector.rvec_to_quaternion(rvec)
-        pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
-
+        # Return response
         response.id = marker_id
-        response.pose = pose
+        response.pose = final_pose
+        
+        self.get_logger().info(f"Detection complete: Marker ID {marker_id}, TF frame: {frame_name}")
+        
         return response
 
 

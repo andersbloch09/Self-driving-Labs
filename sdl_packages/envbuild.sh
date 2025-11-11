@@ -19,8 +19,8 @@ colcon build --packages-up-to franka_msgs btcpp_ros2_interfaces ot2_interfaces a
 source install/setup.bash
 
 # Full build, use other command for lower memory
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-#colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 1
+#colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 1
 
 source install/setup.bash
 
