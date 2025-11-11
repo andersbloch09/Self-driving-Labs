@@ -1,0 +1,6 @@
+# Request (empty)
+---
+
+# Response (single detected marker)
+int32 id
+geometry_msgs/PoseStamped pose

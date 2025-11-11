@@ -235,6 +235,72 @@ std::pair<bool, bool> moveRelativeToFrame(
     return {close, execute_success};
   }
 
+  std::pair<bool, bool> moveToJointPosition(
+    const std::vector<double>& target_joints)
+{
+  const size_t dof = move_group_->getVariableCount();
+
+  if (target_joints.size() != dof)
+  {
+    RCLCPP_ERROR(logger_,
+                 "moveToJointPosition: Expected %zu joints, got %zu",
+                 dof, target_joints.size());
+    return {false, false};
+  }
+
+  // Log goal
+  RCLCPP_INFO(logger_, "Moving to absolute joint position:");
+  for (size_t i = 0; i < dof; i++)
+    RCLCPP_INFO(logger_, "  q[%zu] = %.3f", i, target_joints[i]);
+
+  // Set joint-space goal
+  move_group_->setJointValueTarget(target_joints);
+
+  // Plan
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  bool plan_success =
+      (move_group_->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+
+  bool exec_success = false;
+
+  if (plan_success)
+  {
+    RCLCPP_INFO(logger_,
+        "Executing joint trajectory at %d%% velocity...",
+        static_cast<int>(MAX_VELOCITY_SCALE * 100));
+
+    auto result = move_group_->execute(plan);
+    exec_success = (result == moveit::core::MoveItErrorCode::SUCCESS);
+  }
+  else
+  {
+    RCLCPP_ERROR(logger_, "Joint trajectory planning FAILED.");
+  }
+
+  move_group_->stop();
+
+  // Check closeness of final position vs goal
+  std::vector<double> final_joints = move_group_->getCurrentJointValues();
+  bool close = true;
+  const double tolerance = 0.01;  // rad
+
+  for (size_t i = 0; i < dof; i++)
+  {
+    if (std::fabs(final_joints[i] - target_joints[i]) > tolerance)
+    {
+      close = false;
+      break;
+    }
+  }
+
+  if (close)
+    RCLCPP_INFO(logger_, "✅ Reached target joint position.");
+  else
+    RCLCPP_WARN(logger_,
+       "⚠ Target joint position NOT reached within tolerance.");
+
+  return {close, exec_success};
+}
 
   bool planCartesianPath(
     const std::string& frame_name,
@@ -326,7 +392,6 @@ private:
                pose.pose.orientation.x, pose.pose.orientation.y, 
                pose.pose.orientation.z, pose.pose.orientation.w);
   }
-  
 
   // Member variables
   rclcpp::Node::SharedPtr node_;
@@ -346,8 +411,11 @@ public:
   using MoveInSquare = control_msgs::action::FollowJointTrajectory;
   using GoalHandleMoveInSquare = rclcpp_action::ServerGoalHandle<MoveInSquare>;
 
-  using PickObject = control_msgs::action::FollowJointTrajectory;
-  using GoalHandlePickObject = rclcpp_action::ServerGoalHandle<PickObject>;
+  using MoveBoxPosOnRobot = control_msgs::action::FollowJointTrajectory;
+  using GoalHandleMoveBoxPosOnRobot = rclcpp_action::ServerGoalHandle<MoveBoxPosOnRobot>;
+
+  using CameraCalibration = control_msgs::action::FollowJointTrajectory;
+  using GoalHandleCalibration = rclcpp_action::ServerGoalHandle<CameraCalibration>;
 
   explicit ActionsManager(std::shared_ptr<Manipulator> manip)
   : manip_(manip),
@@ -365,13 +433,21 @@ public:
       std::bind(&ActionsManager::handle_accepted_move_in_square, this, _1)
     );
 
-    // ---- Action: pick_object ----
-    pick_object_server_ = rclcpp_action::create_server<PickObject>(
+    camera_calibration_server_  = rclcpp_action::create_server<CameraCalibration>(
       node_,
-      "pick_object",
-      std::bind(&ActionsManager::handle_goal_pick_object, this, _1, _2),
-      std::bind(&ActionsManager::handle_cancel_pick_object, this, _1),
-      std::bind(&ActionsManager::handle_accepted_pick_object, this, _1)
+      "camera_calibration",
+      std::bind(&ActionsManager::handle_goal_camera_calibration, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_camera_calibration, this, _1),
+      std::bind(&ActionsManager::handle_accepted_camera_calibration, this, _1)
+    );
+
+    // ---- Action: move_box_pos_on_robot ----
+    move_box_pos_on_robot_server_ = rclcpp_action::create_server<MoveBoxPosOnRobot>(
+      node_,
+      "move_box_pos_on_robot",
+      std::bind(&ActionsManager::handle_goal_move_box_pos_on_robot, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_move_box_pos_on_robot, this, _1),
+      std::bind(&ActionsManager::handle_accepted_move_box_pos_on_robot, this, _1)
     );
 
     RCLCPP_INFO(logger_, "✅ ActionsManager ready — actions: [/move_in_square], [/pick_object]");
@@ -379,7 +455,7 @@ public:
 
 private:
   // =====================================================
-  // 1️⃣ move_in_square ACTION
+  //move_in_square ACTION
   // =====================================================
   rclcpp_action::GoalResponse handle_goal_move_in_square(
     const rclcpp_action::GoalUUID &,
@@ -428,33 +504,104 @@ private:
     }
     return true;
   }
+  // =====================================================
+  // camera_calibration ACTION
+  // =====================================================
 
-  // =====================================================
-  // 2️⃣ pick_object ACTION
-  // =====================================================
-  rclcpp_action::GoalResponse handle_goal_pick_object(
+  rclcpp_action::GoalResponse handle_goal_camera_calibration(
     const rclcpp_action::GoalUUID &,
-    std::shared_ptr<const PickObject::Goal>)
+    std::shared_ptr<const CameraCalibration::Goal>)
   {
-    RCLCPP_INFO(logger_, "Received goal for /pick_object");
+    RCLCPP_INFO(logger_, "Received goal for /camera_calibration");
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
-  rclcpp_action::CancelResponse handle_cancel_pick_object(
-    const std::shared_ptr<GoalHandlePickObject>)
+  rclcpp_action::CancelResponse handle_cancel_camera_calibration(
+    const std::shared_ptr<GoalHandleCalibration>)
   {
-    RCLCPP_INFO(logger_, "Cancel request received for /pick_object");
+    RCLCPP_INFO(logger_, "Cancel request received for /camera_calibration");
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
-  void handle_accepted_pick_object(const std::shared_ptr<GoalHandlePickObject> goal_handle)
+  void handle_accepted_camera_calibration(const std::shared_ptr<GoalHandleCalibration> goal_handle)
   {
     std::thread([this, goal_handle]() {
-      auto result = std::make_shared<PickObject::Result>();
-      bool success = pick_object();
+      auto result = std::make_shared<CameraCalibration::Result>();
+      bool success = calibrate_camera(); 
 
       result->error_code = success ? 0 : -1;
-      result->error_string = success ? "Pick completed successfully" : "Pick failed";
+      result->error_string = success ? "Calibration completed successfully" : "Calibration failed";
+
+      if (success)
+        goal_handle->succeed(result);
+      else
+        goal_handle->abort(result);
+    }).detach();
+  }
+  
+  bool calibrate_camera() {
+    RCLCPP_INFO(logger_, "Executing camera calibration...");
+
+    
+    std::vector<double> initial_joints = {0.040248013796111565, -0.6791726456293383, -0.1395924679635489,
+                                        -2.5689465115484365, -0.14891476913616702, 1.7820160946846006,
+                                        0.7973367972589201};
+    manip_->moveToJointPosition(initial_joints);
+    rclcpp::sleep_for(std::chrono::seconds(2));
+    // Add more calibration steps as needed
+    auto joint_target_list = std::vector<std::vector<double>>{
+    {0.04782388471249942, -0.17336348758436476, -0.1201145298083623, -1.8330875176212245, -0.11871012623549507, 1.3905901284623374, 0.7395101646608424},
+
+    {-0.15561781020316984, -0.41171883176232305, 0.3274474033543576, -2.5596163518458233, -0.30950417719413353, 1.78779767370224, 1.2496959300256438},
+
+    {-0.18175793773040433, -1.524229304731938, -0.38794875635791226, -2.7649503838723164, -0.4340341348780526, 1.4808229488096138, 0.8714191941379836},
+
+    {0.5457112110790452, -1.058295548321908, -0.974057254075288, -2.376992587319951, -0.6909174268972457, 1.4805916281373137, 0.7302634253524906},
+
+  {1.2195870974746175, -0.5894056424544509, -1.5358369686227096, -1.9080860292357962, -0.550409801337454, 1.557894101301829, 0.6976626893482457},
+  
+  {0.934879883222396, -1.2257907931205985, -0.49502804495995506, -2.524067088989393, -0.7400466033510504, 1.3365063954989114, 1.3470015028533007},
+  
+  {0.9561815292040506, -1.6257404654988072, -0.32334264627823434, -2.5262677478121036, -0.7329317413552985, 0.8668012846163663, 1.3606218857566748},
+  };
+
+
+    for (const auto& joint_target : joint_target_list) {
+      manip_->moveToJointPosition(joint_target);
+      rclcpp::sleep_for(std::chrono::seconds(2));
+    }
+
+    manip_->moveToJointPosition(initial_joints);
+    rclcpp::sleep_for(std::chrono::seconds(2));
+    return true;
+}
+
+  // =====================================================
+  // move_box_pos_on_robot ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_move_box_pos_on_robot(
+    const rclcpp_action::GoalUUID &,
+    std::shared_ptr<const MoveBoxPosOnRobot::Goal>)
+  {
+    RCLCPP_INFO(logger_, "Received goal for /move_box_pos_on_robot");
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+  }
+
+  rclcpp_action::CancelResponse handle_cancel_move_box_pos_on_robot(
+    const std::shared_ptr<GoalHandleMoveBoxPosOnRobot>)
+  {
+    RCLCPP_INFO(logger_, "Cancel request received for /move_box_pos_on_robot");
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void handle_accepted_move_box_pos_on_robot(const std::shared_ptr<GoalHandleMoveBoxPosOnRobot> goal_handle)
+  {
+    std::thread([this, goal_handle]() {
+      auto result = std::make_shared<MoveBoxPosOnRobot::Result>();
+      bool success = move_box_pos_on_robot();
+
+      result->error_code = success ? 0 : -1;
+      result->error_string = success ? "Move completed successfully" : "Move failed";
 
       if (success)
         goal_handle->succeed(result);
@@ -463,11 +610,27 @@ private:
     }).detach();
   }
 
-  bool pick_object()
+  bool move_box_pos_on_robot()
   {
-    RCLCPP_INFO(logger_, "📦 Executing pick_object...");
-    manip_->moveRelativeToFrame("panda_hand_tcp", { 0.0, 0.0, -0.1, 0, 0, 0 }); // lower
-    manip_->moveRelativeToFrame("panda_hand_tcp", { 0.0, 0.0,  0.1, 0, 0, 0 }); // lift
+    RCLCPP_INFO(logger_, "📦 Executing move_box_pos_on_robot...");
+
+    std::vector<double> orientation = {1.000, 0.004, 0.001, -0.001};
+
+    // conversion to roll-pitch-yaw
+    tf2::Quaternion q(orientation[0], orientation[1], orientation[2], orientation[3]);
+    double roll, pitch, yaw;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+    manip_->MoveGripper(0.04, 0.04); // open
+    manip_->moveRelativeToFrame("panda_link0", {0.538, -0.024, 0.108, roll, pitch, yaw});
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, 0.05, 0, 0, 0}); 
+    manip_->MoveGripper(0.033, 0.033); // close
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, -0.1, 0, 0, 0}); 
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, -0.117, 0, 0, 0, 0}); 
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, 0.1, 0, 0, 0}); 
+    manip_->MoveGripper(0.04, 0.04); // open
+    manip_->planCartesianPath("panda_hand_tcp", {0.0, 0.0, -0.1, 0, 0, 0}); 
+    manip_->moveRelativeToFrame("panda_link0", {0.538, -0.024, 0.108, roll, pitch, yaw});
+
     return true;
   }
 
@@ -478,7 +641,8 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
   rclcpp_action::Server<MoveInSquare>::SharedPtr move_in_square_server_;
-  rclcpp_action::Server<PickObject>::SharedPtr pick_object_server_;
+  rclcpp_action::Server<CameraCalibration>::SharedPtr camera_calibration_server_;
+  rclcpp_action::Server<MoveBoxPosOnRobot>::SharedPtr move_box_pos_on_robot_server_;
 };
 
 
@@ -502,7 +666,7 @@ int main(int argc, char * argv[])
   rclcpp::spin(spin_blocker);
 
 
-  RCLCPP_INFO(manipulator->getNode()->get_logger(), "🧹 Shutting down cleanly...");
+  RCLCPP_INFO(manipulator->getNode()->get_logger(), "Shutting down cleanly...");
 
   // --- stop the manipulator's executor thread properly ---
   manipulator.reset();  // triggers Manipulator destructor → joins executor thread
@@ -510,5 +674,6 @@ int main(int argc, char * argv[])
   rclcpp::shutdown();
   return 0;
 }
+
 
 

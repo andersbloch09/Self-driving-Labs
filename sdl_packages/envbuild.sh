@@ -15,7 +15,7 @@ colcon build --packages-select libfranka --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
 
 # Specific message packages
-colcon build --packages-up-to franka_msgs btcpp_ros2_interfaces ot2_interfaces
+colcon build --packages-up-to franka_msgs btcpp_ros2_interfaces ot2_interfaces aruco_interfaces
 source install/setup.bash
 
 # Full build, use other command for lower memory

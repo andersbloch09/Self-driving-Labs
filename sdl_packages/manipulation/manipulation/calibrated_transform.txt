@@ -1,0 +1,13 @@
+parent frame: panda_hand_tcp
+child frame:  camera_link
+
+translation:  0.0238807  0.00951811  -0.061919
+quaternion:   0.72076695 0.00648695 0.68926279 -0.07327842
+
+
+
+Translation (x, y, z):
+[ 0.0306668 -0.0332122 -0.0594572]
+
+Quaternion (x, y, z, w):
+[0.01428107 0.01096216 0.69356383 0.72017018]
