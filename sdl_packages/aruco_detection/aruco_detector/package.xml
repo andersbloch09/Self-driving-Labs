@@ -19,7 +19,7 @@
   <exec_depend>tf2_py</exec_depend>
 
   <!-- Your custom messages (ArucoDetect.srv) -->
-  <exec_depend>custom_msgs</exec_depend>
+  <exec_depend>aruco_interfaces</exec_depend>
 
   <!-- Standard messages -->
   <exec_depend>sensor_msgs</exec_depend>
@@ -32,10 +32,10 @@
   <exec_depend>image_transport</exec_depend>
 
   <!-- OpenCV + ArUco -->
-  <exec_depend>opencv_python</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
 
   <!-- Used for quaternion_from_matrix -->
-  <exec_depend>python3-tf-transformations</exec_depend>
+  <exec_depend>tf_transformations</exec_depend>
 
   <!-- Optional build / test dependencies -->
   <test_depend>ament_copyright</test_depend>
