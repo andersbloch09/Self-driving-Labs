@@ -235,6 +235,72 @@ std::pair<bool, bool> moveRelativeToFrame(
     return {close, execute_success};
   }
 
+  std::pair<bool, bool> moveToJointPosition(
+    const std::vector<double>& target_joints)
+{
+  const size_t dof = move_group_->getVariableCount();
+
+  if (target_joints.size() != dof)
+  {
+    RCLCPP_ERROR(logger_,
+                 "moveToJointPosition: Expected %zu joints, got %zu",
+                 dof, target_joints.size());
+    return {false, false};
+  }
+
+  // Log goal
+  RCLCPP_INFO(logger_, "Moving to absolute joint position:");
+  for (size_t i = 0; i < dof; i++)
+    RCLCPP_INFO(logger_, "  q[%zu] = %.3f", i, target_joints[i]);
+
+  // Set joint-space goal
+  move_group_->setJointValueTarget(target_joints);
+
+  // Plan
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  bool plan_success =
+      (move_group_->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+
+  bool exec_success = false;
+
+  if (plan_success)
+  {
+    RCLCPP_INFO(logger_,
+        "Executing joint trajectory at %d%% velocity...",
+        static_cast<int>(MAX_VELOCITY_SCALE * 100));
+
+    auto result = move_group_->execute(plan);
+    exec_success = (result == moveit::core::MoveItErrorCode::SUCCESS);
+  }
+  else
+  {
+    RCLCPP_ERROR(logger_, "Joint trajectory planning FAILED.");
+  }
+
+  move_group_->stop();
+
+  // Check closeness of final position vs goal
+  std::vector<double> final_joints = move_group_->getCurrentJointValues();
+  bool close = true;
+  const double tolerance = 0.01;  // rad
+
+  for (size_t i = 0; i < dof; i++)
+  {
+    if (std::fabs(final_joints[i] - target_joints[i]) > tolerance)
+    {
+      close = false;
+      break;
+    }
+  }
+
+  if (close)
+    RCLCPP_INFO(logger_, "✅ Reached target joint position.");
+  else
+    RCLCPP_WARN(logger_,
+       "⚠ Target joint position NOT reached within tolerance.");
+
+  return {close, exec_success};
+}
 
   bool planCartesianPath(
     const std::string& frame_name,
@@ -367,7 +433,7 @@ public:
       std::bind(&ActionsManager::handle_accepted_move_in_square, this, _1)
     );
 
-    camera_calibration = rclcpp_action::create_server<CameraCalibration>(
+    camera_calibration_server_  = rclcpp_action::create_server<CameraCalibration>(
       node_,
       "camera_calibration",
       std::bind(&ActionsManager::handle_goal_camera_calibration, this, _1, _2),
@@ -472,15 +538,29 @@ private:
         goal_handle->abort(result);
     }).detach();
   }
-  bool calibrate_camera()
-  {
+  
+  bool calibrate_camera() {
     RCLCPP_INFO(logger_, "Executing camera calibration...");
-    
-    
 
+    
+    std::vector<double> initial_joints = {};
+    manip_->moveToJointPosition(initial_joints);
+    rclcpp::sleep_for(std::chrono::seconds(2));
+    // Add more calibration steps as needed
+    /*
+    auto joint_target_list = std::vector<std::vector<double>>{
+      {0.0, -0.5, 0.0, -2.0, 0.0, 1.0, 0.5},
+      {0.5, -1.0, 0.5, -1.5, 0.5, 1.0, 0.0},
+      {-0.5, -0.5, -0.5, -2.0, -0.5, 1.0, 0.5}
+    };
 
-    return true;
-  }
+    for (const auto& joint_target : joint_target_list) {
+      manip_->moveToJointPosition(joint_target);
+      rclcpp::sleep_for(std::chrono::seconds(2));
+    }
+    */
+
+}
 
   // =====================================================
   // move_box_pos_on_robot ACTION
@@ -547,6 +627,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
   rclcpp_action::Server<MoveInSquare>::SharedPtr move_in_square_server_;
+  rclcpp_action::Server<CameraCalibration>::SharedPtr camera_calibration_server_;
   rclcpp_action::Server<MoveBoxPosOnRobot>::SharedPtr move_box_pos_on_robot_server_;
 };
 
@@ -571,7 +652,7 @@ int main(int argc, char * argv[])
   rclcpp::spin(spin_blocker);
 
 
-  RCLCPP_INFO(manipulator->getNode()->get_logger(), "🧹 Shutting down cleanly...");
+  RCLCPP_INFO(manipulator->getNode()->get_logger(), "Shutting down cleanly...");
 
   // --- stop the manipulator's executor thread properly ---
   manipulator.reset();  // triggers Manipulator destructor → joins executor thread
@@ -579,5 +660,6 @@ int main(int argc, char * argv[])
   rclcpp::shutdown();
   return 0;
 }
+
 
 
