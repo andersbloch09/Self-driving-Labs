@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-ament-cmake-clang-format \
     ros-humble-realsense2-*\
     ros-humble-behaviortree-cpp \
+    ros-humble-tf-transformations \
     libxcb-xinerama0 \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
@@ -116,7 +117,7 @@ RUN pip install requests \
                 dotenv \
                 vcstool \
                 pyrealsense2 \
-                opentrons
+                opentrons 
 
 # Auto-source ROS 2 environment
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/sdl/.bashrc
