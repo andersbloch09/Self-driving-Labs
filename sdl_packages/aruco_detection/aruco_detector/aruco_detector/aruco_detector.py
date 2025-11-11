@@ -14,6 +14,7 @@ from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseStamped, Quaternion, TransformStamped
 from tf2_ros import StaticTransformBroadcaster
 
+
 from aruco_interfaces.srv import ArucoDetect
 
 
@@ -29,6 +30,7 @@ class ArucoDetector:
         self.image_topic = "/camera/camera/color/image_raw"
 
         # Your RealSense intrinsics
+
         self.camera_matrix = np.array([
             [907.1922312613871, 0.0,                646.733835502371],
             [0.0,                907.7231897656274, 392.47462991366143],

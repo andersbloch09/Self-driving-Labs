@@ -42,7 +42,7 @@ class SimpleClient(Node):
         self.client.wait_for_server()
 
         pkg_dir = os.path.join(os.path.expanduser('~'), 'sdl_ws', 'src', 'ot2_control', 'ot2_control')
-        protocol_path = os.path.join(pkg_dir, 'protocols', 'Macro_cuvette_test.py')
+        protocol_path = os.path.join(pkg_dir, 'protocols', 'fehlings_test_protocol.py')
         custom_labware_folder = os.path.join(pkg_dir, 'custom_labware')
 
         goal = RunProtocol.Goal()

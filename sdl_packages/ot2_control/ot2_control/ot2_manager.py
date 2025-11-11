@@ -7,6 +7,7 @@ from ot2_control.ot2_client import OT2Client
 from ot2_interfaces.action import RunProtocol
 import time
 import asyncio
+import json
 
 class OT2Manager(Node):
     def __init__(self):
@@ -47,8 +48,8 @@ class OT2Manager(Node):
 
         # Example: start your OT2 run
         self.lights = self.client.turn_lights_on()
-        self.status, self.current_run_id, self.current_protocol_id = self.client.run_protocol(self, protocol_path, custom_labware_folder)
-        # self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
+        self.status, self.current_run_id, self.current_protocol_id, self.labware = self.client.run_protocol(self, protocol_path, custom_labware_folder)
+        self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
         done_commands = []
         while rclpy.ok():
             # Check external stop or client cancel
@@ -67,7 +68,11 @@ class OT2Manager(Node):
                 return result
 
             current_status = self.client.get_run_status(self.current_run_id)
-            total_commands, current_command = self.client.get_commands(self.current_protocol_id, self.current_run_id)
+
+            results, current_command = self.client.get_commands(self.current_protocol_id, self.current_run_id)
+            
+            total_commands = len(results)-3
+
 
             if current_command not in done_commands:
                 done_commands.append(current_command)
@@ -77,6 +82,8 @@ class OT2Manager(Node):
 
             #Check if OT-2 finished normally
             if current_status == "succeeded":
+                self.client.blink_lights(3, 0.5)
+                print(json.dumps(results, indent=2))
                 self.get_logger().info("Goal completed successfully")
                 goal_handle.succeed()
                 result.success = True
@@ -95,7 +102,8 @@ class OT2Manager(Node):
             rclpy.spin_once(self, timeout_sec=0.1)
             time.sleep(0.1)
 
-        self.lights = self.client.turn_lights_off()
+        
+        
 
     def handle_goal(self, goal_request):
         if self.active_goal is not None:
