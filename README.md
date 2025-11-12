@@ -47,18 +47,45 @@ colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 1
 
 ### Database Setup
 
-To manage the Supabase database:
+# Starting, stopping and transferring data
+This project runs a containerized Supabase setup to track the positions of vessels and reactants throughout the lab. Below is listed some of the essential commands needed to use it:
 
+Start Supabase services
 ```bash
-# Start Supabase services
 cd supabase
 bash start.sh
+```
 
-# Stop Supabase services
+Stop Supabase database using:
+```bash
 cd supabase
 bash stop.sh
 ```
 
+The contents of the database are not automatically synchronized with git, so in order to preserve the data from instance to instance, it is necessary to dump the contents into a seed file that git can track. With the supabase containers running, run the following command in root directory of the repository where the supabase files are located.
+```bash
+docker exec -t supabase-db pg_dump -U postgres -d postgres > supabase/seed.sql
+```
+This should create a seed.sql file that is commitable through git.
+
+When you need to load the contents of the seed file into a different instance of supabase, you have to run this command from the root directory of the repository. Ensure that the containers are running.
+```bash
+cat supabase/seed.sql | docker exec -i supabase-db psql -U postgres -d postgres
+```
+# Test database interaction functions
+Start by ensuring that the supabase docker has been started by running start.sh in the supabase directory
+Then build the database_service_pkg with the following command:
+```bash
+colcon build --packages-select database_service_pkg
+```
+Then run the node with:
+```bash
+source install/setup.bash && ros2 run database_service_pkg interactive_database_test
+```
+There are instructions printed in the terminal for usage of the testing tool, but it shows how the general implementation works.
+It is recommended to open the database og http://localhost:8000 to monitor how the rows are manipulated through the functions.
+
+### Examples
 
 # Mir BT example execution:
 
@@ -77,20 +104,17 @@ Make sure that the MiR is started, has sufficient battery life and is set to "Re
 ```bash
 source install/setup.bash && ros2 action send_goal /bt_execution btcpp_ros2_interfaces/action/ExecuteTree "{target_tree: 'BT_Test'}" --feedback
 ```
+The folder bt_server_pkg/behavior_trees is loaded in its entirety, and each behavior tree can be referenced as the target tree in the command above. The alias used for each tree should be found in the individual files. For instance: <BehaviorTree ID="BT_Test">
 
-# Test database interaction functions
+# Running the Franca
+In order to run the franca, first ensure that the the desired host machine is connected to the manipulator through the ethernet cable. The host machine will have to be running the Real Time Kernel, a guide for which can be found at: https://frankarobotics.github.io/docs/libfranka/docs/installation_linux.html#setting-up-the-real-time-kernel
 
-Start by ensuring that the supabase docker has been started by running start.sh in the supabase directory
+Ensure that the host machine has booted using the correct kernel, either by default or by choosing it in the GNU bootloader.
+Then, on your own machine (not the host machine), run the following command to forward the franca control interface to be accessible from your own machine. Replace sdl@192.168.1.42 with the username and IP of the host machine connected to the franca.
 
-Then build the database_service_pkg with the following command:
 ```bash
-colcon build --packages-select database_service_pkg
+ssh -L 8888:192.168.0.30:443 sdl@192.168.1.42
 ```
+This SSH session should be running at all times.
+Then open https://robot.franka.de:8888/desk/ using google chrome, ignoring the warnings and proceeding to the site. Run homing of the manipulator and activate FCI in the dropdown menu in the top right corner. This enables movements triggered by ROS.
 
-Then run the node with:
-```bash
-source install/setup.bash && ros2 run database_service_pkg interactive_database_test
-```
-
-There are instructions printed in the terminal for usage of the testing tool, but it shows how the general implementation.
-It is recommended to open the database og http://localhost:8000 to monitor how the rows are manipulated through the functions.
