@@ -64,13 +64,18 @@ bash stop.sh
 
 The contents of the database are not automatically synchronized with git, so in order to preserve the data from instance to instance, it is necessary to dump the contents into a seed file that git can track. With the supabase containers running, run the following command in root directory of the repository where the supabase files are located.
 ```bash
-docker exec -t supabase-db pg_dump -U postgres -d postgres > supabase/seed.sql
+docker exec -t supabase-db pg_dump \
+  -U supabase_admin \
+  -d postgres \
+  -n public \
+  --column-inserts \
+  > supabase/seed.sql
 ```
 This should create a seed.sql file that is commitable through git.
 
 When you need to load the contents of the seed file into a different instance of supabase, you have to run this command from the root directory of the repository. Ensure that the containers are running.
 ```bash
-cat supabase/seed.sql | docker exec -i supabase-db psql -U postgres -d postgres
+docker exec -i supabase-db psql -U supabase_admin -d postgres < supabase/seed.sql
 ```
 # Test database interaction functions
 Start by ensuring that the supabase docker has been started by running start.sh in the supabase directory
