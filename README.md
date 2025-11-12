@@ -78,7 +78,11 @@ When you need to load the contents of the seed file into a different instance of
 docker exec -i supabase-db psql -U supabase_admin -d postgres < supabase/seed.sql
 ```
 # Test database interaction functions
-Start by ensuring that the supabase docker has been started by running start.sh in the supabase directory
+Start by ensuring that POOLER_TENANT_ID is set to "mytenant" in your .env file, and that the supabase docker has been started. This can be done by running start.sh in the supabase directory or you can check whether it is already running by executing:
+```bash
+docker ps
+```
+
 Then build the database_service_pkg with the following command:
 ```bash
 colcon build --packages-select database_service_pkg
