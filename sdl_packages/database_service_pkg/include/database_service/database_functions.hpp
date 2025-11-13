@@ -35,6 +35,10 @@ public:
 
     std::string getContainerLocation(const std::string& container_id);
 
+    std::string getContainerLocationByName(const std::string& container_name);
+
+    std::string getContainerLocationTransform(const std::string& container_name);
+
     StorageObjectInfo getStorageObjectInfo(const std::string& storage_object_name);
 
     bool logMovement(const std::string& container_id, const std::string& from_slot, 
@@ -44,7 +48,7 @@ public:
 
     bool updateContainerLocation(const std::string& container_id, const std::string& slot_name, const std::string& moved_by);
 
-    std::string getContainerLocationByName(const std::string& container_name);
+    std::string getContainerStorageObjectByContainerName(const std::string& container_name);
 
     bool updateContainerLocationByName(const std::string& container_name, const std::string& slot_name);
 
@@ -90,6 +94,10 @@ bool updateContainerLocationByName(const std::string& container_name, const std:
 bool updateContainerLocationByName(const std::string& container_name, const std::string& slot_name, const std::string& moved_by);
 
 std::vector<std::string> getAllContainersInStorageObject(const std::string& storage_object_name);
+
+std::string getContainerLocationTransform(const std::string& container_name);
+
+std::string getContainerStorageObjectByContainerName(const std::string& container_name);
 
 // Auto-placement convenience functions
 bool moveContainerToStorageObject(const std::string& container_id, const std::string& storage_object_name);

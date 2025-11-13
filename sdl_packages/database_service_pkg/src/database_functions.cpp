@@ -59,7 +59,7 @@ std::string DatabaseHelpers::getFreeSlot(const std::string& storage_object_name)
         
         // Query to find the first available slot in the specified storage object
         std::string query = R"(
-            SELECT s.name 
+            SELECT s.transform_to_object 
             FROM slots s
             JOIN storage_objects so ON s.storage_object_id = so.id
             WHERE so.name = )" + transaction.quote(storage_object_name) + R"(
@@ -75,8 +75,9 @@ std::string DatabaseHelpers::getFreeSlot(const std::string& storage_object_name)
                        "No free slots found in storage object: %s", storage_object_name.c_str());
             return "";
         }
-        
+        // return the transform of the first free slot found
         std::string free_slot = result[0][0].as<std::string>();
+
         transaction.commit();
         
         return free_slot;
@@ -341,6 +342,70 @@ std::string DatabaseHelpers::getContainerLocation(const std::string& container_i
     }
 }
 
+std::string DatabaseHelpers::getContainerLocationByName(const std::string& container_name)
+{
+    try {
+        auto connection = static_cast<pqxx::connection*>(createConnection());
+        pqxx::work transaction(*connection);
+        
+        std::string query = R"(
+            SELECT s.name 
+            FROM containers c
+            JOIN slots s ON c.current_slot_id = s.id
+            WHERE c.name = )" + transaction.quote(container_name) + ";";
+        
+        pqxx::result result = transaction.exec(query);
+        
+        if (result.empty()) {
+            RCLCPP_WARN(rclcpp::get_logger("database_helpers"), 
+                       "Container '%s' not found or not assigned to any slot", container_name.c_str());
+            return "";
+        }
+        
+        std::string location = result[0][0].as<std::string>();
+        transaction.commit();
+        
+        return location;
+        
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                    "Error getting container location by name: %s", e.what());
+        return "";
+    }
+}
+
+std::string DatabaseHelpers::getContainerLocationTransform(const std::string& container_name)
+{
+    try {
+        auto connection = static_cast<pqxx::connection*>(createConnection());
+        pqxx::work transaction(*connection);
+        
+        std::string query = R"(
+            SELECT s.transform_to_object 
+            FROM containers c
+            JOIN slots s ON c.current_slot_id = s.id
+            WHERE c.name = )" + transaction.quote(container_name) + ";";
+        
+        pqxx::result result = transaction.exec(query);
+        
+        if (result.empty()) {
+            RCLCPP_WARN(rclcpp::get_logger("database_helpers"), 
+                       "Container '%s' not found or not assigned to any slot", container_name.c_str());
+            return "";
+        }
+        
+        std::string location_transform = result[0][0].as<std::string>();
+        transaction.commit();
+        
+        return location_transform;
+        
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                    "Error getting container location transform: %s", e.what());
+        return "";
+    }
+}
+
 StorageObjectInfo DatabaseHelpers::getStorageObjectInfo(const std::string& storage_object_name)
 {
     StorageObjectInfo info;
@@ -441,16 +506,17 @@ std::vector<std::string> DatabaseHelpers::getAllContainersInStorageObject(const 
     return containers;
 }
 
-std::string DatabaseHelpers::getContainerLocationByName(const std::string& container_name)
+std::string DatabaseHelpers::getContainerStorageObjectByContainerName(const std::string& container_name)
 {
     try {
         auto connection = static_cast<pqxx::connection*>(createConnection());
         pqxx::work transaction(*connection);
         
         std::string query = R"(
-            SELECT s.name 
+            SELECT so.name 
             FROM containers c
             JOIN slots s ON c.current_slot_id = s.id
+            JOIN storage_objects so ON s.storage_object_id = so.id
             WHERE c.name = )" + transaction.quote(container_name) + ";";
         
         pqxx::result result = transaction.exec(query);
@@ -461,14 +527,14 @@ std::string DatabaseHelpers::getContainerLocationByName(const std::string& conta
             return "";
         }
         
-        std::string location = result[0][0].as<std::string>();
+        std::string storage_object_name = result[0][0].as<std::string>();
         transaction.commit();
         
-        return location;
+        return storage_object_name;
         
     } catch (const std::exception &e) {
         RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
-                    "Error getting container location by name: %s", e.what());
+                    "Error getting container storage object by name: %s", e.what());
         return "";
     }
 }
@@ -797,6 +863,11 @@ std::string getContainerLocation(const std::string& container_id)
     return DatabaseHelpers::getInstance().getContainerLocation(container_id);
 }
 
+std::string getContainerLocationByName(const std::string& container_name)
+{
+    return DatabaseHelpers::getInstance().getContainerLocationByName(container_name);
+}
+
 StorageObjectInfo getStorageObjectInfo(const std::string& storage_object_name)
 {
     return DatabaseHelpers::getInstance().getStorageObjectInfo(storage_object_name);
@@ -813,11 +884,6 @@ bool updateContainerLocation(const std::string& container_id, const std::string&
     return DatabaseHelpers::getInstance().updateContainerLocation(container_id, slot_name, moved_by);
 }
 
-std::string getContainerLocationByName(const std::string& container_name)
-{
-    return DatabaseHelpers::getInstance().getContainerLocationByName(container_name);
-}
-
 bool updateContainerLocationByName(const std::string& container_name, const std::string& slot_name)
 {
     return DatabaseHelpers::getInstance().updateContainerLocationByName(container_name, slot_name);
@@ -831,6 +897,16 @@ bool updateContainerLocationByName(const std::string& container_name, const std:
 std::vector<std::string> getAllContainersInStorageObject(const std::string& storage_object_name)
 {
     return DatabaseHelpers::getInstance().getAllContainersInStorageObject(storage_object_name);
+}
+
+std::string getContainerLocationTransform(const std::string& container_name)
+{
+    return DatabaseHelpers::getInstance().getContainerLocationTransform(container_name);
+}
+
+std::string getContainerStorageObjectByContainerName(const std::string& container_name)
+{
+    return DatabaseHelpers::getInstance().getContainerStorageObjectByContainerName(container_name);
 }
 
 bool moveContainerToStorageObject(const std::string& container_id, const std::string& storage_object_name)

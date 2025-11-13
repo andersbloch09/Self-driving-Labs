@@ -24,6 +24,8 @@ private:
             std::cout << "5. Update container location (by name)" << std::endl;
             std::cout << "6. Get container location (by ID)" << std::endl;
             std::cout << "7. Auto-move container to storage object" << std::endl;
+            std::cout << "8. Get container location transform (by name)" << std::endl;
+            std::cout << "9. Get container storage object (by name)" << std::endl;
             std::cout << "0. Exit" << std::endl;
             std::cout << "Choice: ";
             
@@ -38,6 +40,8 @@ private:
                 case 5: testUpdateContainerLocation(); break;
                 case 6: testGetContainerLocationById(); break;
                 case 7: testAutoMoveContainer(); break;
+                case 8: testGetContainerLocationTransform(); break;
+                case 9: testGetContainerStorageObject(); break;
                 case 0: return;
                 default: std::cout << "Invalid choice!" << std::endl;
             }
@@ -153,6 +157,34 @@ private:
             std::cout << "Container automatically placed in free slot!" << std::endl;
         } else {
             std::cout << "Failed to auto-move container!" << std::endl;
+        }
+    }
+
+    void testGetContainerLocationTransform()
+    {
+        std::string container_name;
+        std::cout << "Enter container name: ";
+        std::cin >> container_name;
+        
+        std::string transform = database_lib::getContainerLocationTransform(container_name);
+        if (!transform.empty()) {
+            std::cout << "Container transform: " << transform << std::endl;
+        } else {
+            std::cout << "Container not found or not assigned to any slot!" << std::endl;
+        }
+    }
+
+    void testGetContainerStorageObject()
+    {
+        std::string container_name;
+        std::cout << "Enter container name: ";
+        std::cin >> container_name;
+        
+        std::string storage_object = database_lib::getContainerStorageObjectByContainerName(container_name);
+        if (!storage_object.empty()) {
+            std::cout << "Container is in storage object: " << storage_object << std::endl;
+        } else {
+            std::cout << "Container not found or not assigned to any slot!" << std::endl;
         }
     }
 };
