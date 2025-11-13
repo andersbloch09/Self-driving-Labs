@@ -18,6 +18,10 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(rclcpp_action REQUIRED) 
 find_package(control_msgs REQUIRED)
+find_package(btcpp_ros2_interfaces REQUIRED)
+find_package(aruco_interfaces REQUIRED)
+find_package(franka_msgs REQUIRED)
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -45,6 +49,9 @@ ament_target_dependencies(manipulation
   tf2_ros
   tf2_geometry_msgs
   control_msgs
+  btcpp_ros2_interfaces
+  aruco_interfaces
+  franka_msgs
 )
 
 install(TARGETS
