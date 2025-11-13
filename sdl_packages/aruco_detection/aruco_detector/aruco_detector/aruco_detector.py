@@ -306,32 +306,15 @@ class ArucoDetector:
         # Average quaternions
         quaternions = [p['quaternion'] for p in poses]
         avg_quat = self.average_quaternions(quaternions)
-
-        # Calculate offset to move from corner to center of marker
-        # ArUco detection gives pose at top-left corner, we want center
-        offset_x = self.marker_size / 2.0  # Half marker size in X
-        offset_y = self.marker_size / 2.0  # Half marker size in Y
-        
-        # Convert quaternion to rotation matrix to apply offset in marker frame
-        qw, qx, qy, qz = avg_quat[3], avg_quat[0], avg_quat[1], avg_quat[2]
-        R = np.array([
-            [1 - 2*(qy**2 + qz**2), 2*(qx*qy - qw*qz), 2*(qx*qz + qw*qy)],
-            [2*(qx*qy + qw*qz), 1 - 2*(qx**2 + qz**2), 2*(qy*qz - qw*qx)],
-            [2*(qx*qz - qw*qy), 2*(qy*qz + qw*qx), 1 - 2*(qx**2 + qy**2)]
-        ])
-        
-        # Apply offset in marker's local frame
-        offset_local = np.array([offset_x, offset_y, 0.0])
-        offset_world = R @ offset_local
         
         # Build final PoseStamped with centered position
         final_pose = PoseStamped()
         final_pose.header.stamp = rclpy.time.Time().to_msg()
         final_pose.header.frame_id = self.camera_frame
 
-        final_pose.pose.position.x = float(median_pos[0] + offset_world[0])
-        final_pose.pose.position.y = float(median_pos[1] + offset_world[1])
-        final_pose.pose.position.z = float(median_pos[2] + offset_world[2])
+        final_pose.pose.position.x = float(median_pos[0])
+        final_pose.pose.position.y = float(median_pos[1])
+        final_pose.pose.position.z = float(median_pos[2])
         
         final_pose.pose.orientation.x = float(avg_quat[0])
         final_pose.pose.orientation.y = float(avg_quat[1])
