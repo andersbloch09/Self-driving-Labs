@@ -12,6 +12,7 @@
 
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 
@@ -19,9 +20,13 @@
 
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <control_msgs/action/follow_joint_trajectory.hpp>
+#include <btcpp_ros2_interfaces/action/cube_visual_calibration.hpp>
+#include <aruco_interfaces/srv/aruco_detect.hpp>
+#include <franka_msgs/srv/error_recovery.hpp>
 
 #include <vector>
 #include <cmath>
@@ -105,6 +110,32 @@ public:
     // =====================================================
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 
+    static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(node_);
+    // ===============================================
+    // Create grasp frame from known orientation
+    // ===============================================
+    std::vector<double> orientation = {1.00, 0.00, 0.00, 0.00};
+
+    // Convert quaternion → RPY
+    tf2::Quaternion q(orientation[0], orientation[1], orientation[2], orientation[3]);
+    double roll, pitch, yaw;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+
+    // Define position
+    std::vector<double> translation = {0.538, -0.024, 0.108};
+
+    // Publish the static frame using your new method
+    publishStaticFrame(
+      "panda_link0",          // parent frame
+      "mir_storage_lookout",          // new child frame name
+      translation,            // translation in meters
+      {roll, pitch, yaw}      // rotation in radians
+    );
+
+    // ===============================================
+    // initialize Aruco detection client
+    // ===============================================
+    aruco_client_ = node_->create_client<aruco_interfaces::srv::ArucoDetect>("aruco_detect");
 
     // Configure MoveIt exactly like move_robot_server
     move_group_->setPoseReferenceFrame(base_link);
@@ -137,7 +168,7 @@ public:
     auto final_pose = move_group_->getCurrentPose();
     printPose(final_pose);
     
-    RCLCPP_INFO(logger_, "✅  manipulation completed!");
+    RCLCPP_INFO(logger_, "manipulation completed!");
   }
   
   ~Manipulator() {
@@ -148,8 +179,13 @@ public:
     }
   }
 
+// getter methods
 rclcpp::Node::SharedPtr getNode() const { return node_; }
 
+rclcpp::Client<aruco_interfaces::srv::ArucoDetect>::SharedPtr getArucoClient() const { 
+  return aruco_client_; 
+}
+bool recover() { return recoverFromError(); }
 
 void addCollisionMesh(
     const std::string& object_id,
@@ -382,6 +418,44 @@ bool MoveGripper(double left_joint, double right_joint)
   return false;
 }
 
+void publishStaticFrame(
+    const std::string& parent_frame,
+    const std::string& child_frame,
+    const std::vector<double>& translation = {0.0, 0.0, 0.0},
+    const std::vector<double>& rpy = {0.0, 0.0, 0.0})
+{
+  if (!static_broadcaster_) {
+    static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(node_);
+  }
+
+  geometry_msgs::msg::TransformStamped t;
+  t.header.stamp = node_->get_clock()->now();
+  t.header.frame_id = parent_frame;
+  t.child_frame_id = child_frame;
+
+  // Translation
+  t.transform.translation.x = translation[0];
+  t.transform.translation.y = translation[1];
+  t.transform.translation.z = translation[2];
+
+  // Rotation
+  tf2::Quaternion q;
+  q.setRPY(rpy[0], rpy[1], rpy[2]);
+  t.transform.rotation.x = q.x();
+  t.transform.rotation.y = q.y();
+  t.transform.rotation.z = q.z();
+  t.transform.rotation.w = q.w();
+
+  static_broadcaster_->sendTransform(t);
+
+  RCLCPP_INFO(
+    logger_,
+    "Published static TF [%s -> %s]  (xyz: [%.3f, %.3f, %.3f], rpy: [%.3f, %.3f, %.3f])",
+    parent_frame.c_str(), child_frame.c_str(),
+    translation[0], translation[1], translation[2],
+    rpy[0], rpy[1], rpy[2]);
+}
+
 private:
   // Print pose helper (like in move_robot_server)
   void printPose(const geometry_msgs::msg::PoseStamped& pose) {
@@ -393,6 +467,36 @@ private:
                pose.pose.orientation.z, pose.pose.orientation.w);
   }
 
+
+ bool recoverFromError() {
+  if (!error_recovery_client_) {
+    error_recovery_client_ = node_->create_client<franka_msgs::srv::ErrorRecovery>(
+      "/panda_error_recovery_service_server/error_recovery"
+    );
+  }
+  
+  if (!error_recovery_client_->wait_for_service(std::chrono::seconds(2))) {
+    RCLCPP_WARN(logger_, "Error recovery service not available");
+    return false;
+  }
+  
+  auto request = std::make_shared<franka_msgs::srv::ErrorRecovery::Request>();
+  auto future = error_recovery_client_->async_send_request(request);
+  
+  // Use wait_for instead of spin_until_future_complete
+  auto status = future.wait_for(std::chrono::seconds(5));
+  
+  if (status == std::future_status::ready) {
+    auto response = future.get();
+    RCLCPP_INFO(logger_, "Error recovery completed");
+    rclcpp::sleep_for(std::chrono::seconds(2));
+    return true;
+  } else {
+    RCLCPP_ERROR(logger_, "Error recovery service call timed out");
+    return false;
+  }
+}
+
   // Member variables
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
@@ -400,22 +504,28 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> gripper_group_;
+  rclcpp::Client<franka_msgs::srv::ErrorRecovery>::SharedPtr error_recovery_client_;
   std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_broadcaster_;
   std::thread executor_thread_;
+  rclcpp::Client<aruco_interfaces::srv::ArucoDetect>::SharedPtr aruco_client_;
 };
 
 
 class ActionsManager
 {
 public:
-  using MoveInSquare = control_msgs::action::FollowJointTrajectory;
-  using GoalHandleMoveInSquare = rclcpp_action::ServerGoalHandle<MoveInSquare>;
+  using GoHome = control_msgs::action::FollowJointTrajectory;
+  using GoalHandleGoHome = rclcpp_action::ServerGoalHandle<GoHome>;
 
   using MoveBoxPosOnRobot = control_msgs::action::FollowJointTrajectory;
   using GoalHandleMoveBoxPosOnRobot = rclcpp_action::ServerGoalHandle<MoveBoxPosOnRobot>;
 
   using CameraCalibration = control_msgs::action::FollowJointTrajectory;
   using GoalHandleCalibration = rclcpp_action::ServerGoalHandle<CameraCalibration>;
+
+  using CubeVisualCalibration = btcpp_ros2_interfaces::action::CubeVisualCalibration;
+  using GoalHandleCubeVisualCalibration = rclcpp_action::ServerGoalHandle<CubeVisualCalibration>;
 
   explicit ActionsManager(std::shared_ptr<Manipulator> manip)
   : manip_(manip),
@@ -425,12 +535,20 @@ public:
     using namespace std::placeholders;
 
     // ---- Action: move_in_square ----
-    move_in_square_server_ = rclcpp_action::create_server<MoveInSquare>(
+    go_home_server_ = rclcpp_action::create_server<GoHome>(
       node_,
-      "move_in_square",
-      std::bind(&ActionsManager::handle_goal_move_in_square, this, _1, _2),
-      std::bind(&ActionsManager::handle_cancel_move_in_square, this, _1),
-      std::bind(&ActionsManager::handle_accepted_move_in_square, this, _1)
+      "go_home",
+      std::bind(&ActionsManager::handle_goal_go_home, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_go_home, this, _1),
+      std::bind(&ActionsManager::handle_accepted_go_home, this, _1)
+    );
+
+    cube_visual_calibration_server_ = rclcpp_action::create_server<CubeVisualCalibration>(
+      node_,
+      "cube_visual_calibration",
+      std::bind(&ActionsManager::handle_goal_cube_visual_calibration, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_cube_visual_calibration, this, _1),
+      std::bind(&ActionsManager::handle_accepted_cube_visual_calibration, this, _1)
     );
 
     camera_calibration_server_  = rclcpp_action::create_server<CameraCalibration>(
@@ -450,34 +568,32 @@ public:
       std::bind(&ActionsManager::handle_accepted_move_box_pos_on_robot, this, _1)
     );
 
-    RCLCPP_INFO(logger_, "✅ ActionsManager ready — actions: [/move_in_square], [/pick_object]");
   }
 
 private:
   // =====================================================
-  //move_in_square ACTION
+  //go_home ACTION
   // =====================================================
-  rclcpp_action::GoalResponse handle_goal_move_in_square(
+  rclcpp_action::GoalResponse handle_goal_go_home(
     const rclcpp_action::GoalUUID &,
-    std::shared_ptr<const MoveInSquare::Goal>)
+    std::shared_ptr<const GoHome::Goal>)
   {
-    RCLCPP_INFO(logger_, "Received goal for /move_in_square");
+    RCLCPP_INFO(logger_, "Received goal for /go_home");
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
-  rclcpp_action::CancelResponse handle_cancel_move_in_square(
-    const std::shared_ptr<GoalHandleMoveInSquare>)
+  rclcpp_action::CancelResponse handle_cancel_go_home(
+    const std::shared_ptr<GoalHandleGoHome>)
   {
-    RCLCPP_INFO(logger_, "Cancel request received for /move_in_square");
+    RCLCPP_INFO(logger_, "Cancel request received for /go_home");
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
-  void handle_accepted_move_in_square(const std::shared_ptr<GoalHandleMoveInSquare> goal_handle)
+  void handle_accepted_go_home(const std::shared_ptr<GoalHandleGoHome> goal_handle)
   {
     std::thread([this, goal_handle]() {
-      auto result = std::make_shared<MoveInSquare::Result>();
-      bool success = move_in_square();
-
+      auto result = std::make_shared<GoHome::Result>();
+      bool success = go_home();
       result->error_code = success ? 0 : -1;
       result->error_string = success ? "Trajectory executed successfully" : "Trajectory failed";
 
@@ -488,22 +604,113 @@ private:
     }).detach();
   }
 
-  bool move_in_square()
+  bool go_home()
   {
-    RCLCPP_INFO(logger_, "🤖 Executing move_in_square...");
-    for (int i = 0; i < 2; ++i)
-    {
-      manip_->planCartesianPath("panda_hand_tcp", { 0.1,  0.0, 0.0, 0, 0, 0 });
-      manip_->MoveGripper(0.1, 0.1); // open
-      manip_->planCartesianPath("panda_hand_tcp", { 0.0,  0.1, 0.0, 0, 0, 0 });
-      manip_->MoveGripper(0.0, 0.0); // close
-      manip_->planCartesianPath("panda_hand_tcp", {-0.1,  0.0, 0.0, 0, 0, 0 });
-      manip_->MoveGripper(0.1, 0.1); // open
-      manip_->planCartesianPath("panda_hand_tcp", { 0.0, -0.1, 0.0, 0, 0, 0 });
-      manip_->MoveGripper(0.0, 0.0); // close
-    }
+
+    manip_->recover();  
+
+    manip_->moveToJointPosition(std::vector<double>{
+      0.20375095067107887, -0.39273988735964127, -0.17276381184038808,
+      -2.7220893394764865, -0.0844567528031363, 2.3430847805341086, 
+      0.8822717887647267});
     return true;
   }
+
+  // =====================================================
+  // cube_visual_calibration ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_cube_visual_calibration(
+  const rclcpp_action::GoalUUID &,
+  std::shared_ptr<const CubeVisualCalibration::Goal> goal)
+{
+  RCLCPP_INFO(logger_, "Received goal for /cube_visual_calibration with side: %s", goal->side.c_str());
+  
+  // Optional: validate the side parameter
+  if (goal->side != "left" && goal->side != "right") {
+    RCLCPP_ERROR(logger_, "Invalid side parameter: %s. Must be 'left' or 'right'", goal->side.c_str());
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse handle_cancel_cube_visual_calibration(
+  const std::shared_ptr<GoalHandleCubeVisualCalibration>)
+{
+  RCLCPP_INFO(logger_, "Cancel request received for /cube_visual_calibration");
+  return rclcpp_action::CancelResponse::ACCEPT;
+} 
+
+void handle_accepted_cube_visual_calibration(const std::shared_ptr<GoalHandleCubeVisualCalibration> goal_handle)
+{
+  std::thread([this, goal_handle]() {
+    // Extract the 'side' parameter from the goal
+    const auto goal = goal_handle->get_goal();
+    std::string side = goal->side;
+    
+    auto result = std::make_shared<CubeVisualCalibration::Result>();
+    bool success = cube_visual_calibration(side);  // Pass side to the function
+
+    result->error_code = success ? 0 : -1;
+    result->message = success 
+      ? "Cube visual calibration completed successfully for " + side + " side"
+      : "Cube visual calibration failed for " + side + " side";
+
+    if (success)
+      goal_handle->succeed(result);
+    else
+      goal_handle->abort(result);
+  }).detach();
+}
+
+void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCubeVisualCalibration>)
+{
+  RCLCPP_INFO(logger_, "Cube visual calibration canceled");
+}
+
+  bool cube_visual_calibration(const std::string& side) {
+
+    if (side == "right") {
+      RCLCPP_INFO(logger_, "Executing cube visual calibration...");
+      manip_->moveToJointPosition(std::vector<double>{
+          1.5956115519456693, 0.8311388652199193, -2.50595094115274, 
+          -2.1689134552938896, 0.2011045270697737, 1.893249041398366, 
+          1.31055953314449
+      });
+    } else if (side == "left") {
+      RCLCPP_INFO(logger_, "Executing cube visual calibration...");
+      manip_->moveToJointPosition(std::vector<double>{
+        0.3588204508785312, -0.4363771210260558, -0.3616325221749825,
+        -1.900478438790212, 0.28568802635543683, 1.4648013339042663,
+        -0.7218936765773428});}
+      
+    // Call aruco detection service using the getter
+    auto request = std::make_shared<aruco_interfaces::srv::ArucoDetect::Request>();
+    auto future = manip_->getArucoClient()->async_send_request(request);
+    auto response = future.get(); 
+    
+    // Check if marker was detected
+    if (response->id < 0) {
+      RCLCPP_WARN(logger_, "No ArUco marker detected.");
+      return false;
+    }
+    
+    
+    if (response->id != 0) {
+      manip_->moveRelativeToFrame(
+        "aruco_marker_" + std::to_string(response->id),
+        {0, 0, -0.2, 0, 0, 0});}
+    
+    // Call service again for better frame
+    future = manip_->getArucoClient()->async_send_request(request);
+    response = future.get();  
+
+
+    RCLCPP_INFO(logger_, "Detected ArUco marker ID: %d", response->id);
+    return true;
+  }
+
+
   // =====================================================
   // camera_calibration ACTION
   // =====================================================
@@ -634,13 +841,16 @@ private:
     return true;
   }
 
+  
+
   // =====================================================
   // Members
   // =====================================================
   std::shared_ptr<Manipulator> manip_;
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
-  rclcpp_action::Server<MoveInSquare>::SharedPtr move_in_square_server_;
+  rclcpp_action::Server<GoHome>::SharedPtr go_home_server_;
+  rclcpp_action::Server<CubeVisualCalibration>::SharedPtr cube_visual_calibration_server_;
   rclcpp_action::Server<CameraCalibration>::SharedPtr camera_calibration_server_;
   rclcpp_action::Server<MoveBoxPosOnRobot>::SharedPtr move_box_pos_on_robot_server_;
 };

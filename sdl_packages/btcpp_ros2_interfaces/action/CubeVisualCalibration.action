@@ -1,0 +1,11 @@
+# Goal definition
+string side   # "left" or "right"
+
+---
+# Result definition
+int32 error_code
+string message
+
+---
+# Feedback definition (optional)
+float32 progress

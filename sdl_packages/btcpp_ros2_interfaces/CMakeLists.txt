@@ -11,7 +11,9 @@ rosidl_generate_interfaces(btcpp_ros2_interfaces
     "msg/NodeStatus.msg"
     "action/ExecuteTree.action"
     "action/GoToMission.action"
-    "action/Sleep.action")
+    "action/Sleep.action"
+    "action/CubeVisualCalibration.action")
+   
 
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()

@@ -12,8 +12,8 @@ import cv2.aruco as aruco
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseStamped, Quaternion, TransformStamped
-from tf2_ros import StaticTransformBroadcaster
-
+from tf2_ros import StaticTransformBroadcaster, Buffer, TransformListener
+import tf2_geometry_msgs
 
 from aruco_interfaces.srv import ArucoDetect
 
@@ -53,13 +53,19 @@ class ArucoDetector:
 
         # Calibrated camera frame name
         self.camera_frame = "camera_link_calibrated"
+        self.base_frame = "panda_link0"
 
         # ArUco dictionary
         self.aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_50)
         self.parameters = cv2.aruco.DetectorParameters_create()
 
+        # TF setup 
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, node)
         # Static TF broadcaster
         self.static_broadcaster = StaticTransformBroadcaster(node)
+
+
 
     # -----------------------------------------------------------------
     def wait_for_image(self, timeout=1.0):
@@ -79,29 +85,7 @@ class ArucoDetector:
         self.node.destroy_subscription(sub)
         return msg_container["msg"]
 
-    # -----------------------------------------------------------------
-    def transform_pose_to_world(self, rvec_cam, tvec_cam):
-        """
-        Transform from OpenCV optical frame (X=right, Y=down, Z=forward)
-        to ROS camera frame (X=forward, Y=left, Z=up).
-        
-        This matches the transformation from your old working detector.
-        """
-        R_wc = np.array([[0,  0,  1],
-                        [-1, 0,  0],
-                        [0, -1,  0]], dtype=float)
 
-        # Convert rvec to rotation matrix
-        R_cam, _ = cv2.Rodrigues(rvec_cam.reshape(3,))
-        t_cam = tvec_cam.reshape(3,)
-
-        # Transform to world (ROS camera frame)
-        R_world = R_wc @ R_cam
-        t_world = R_wc @ t_cam
-
-        # Convert back to rvec
-        rvec_world, _ = cv2.Rodrigues(R_world)
-        return rvec_world.reshape(3,), t_world.reshape(3,)
 
     # -----------------------------------------------------------------
     def detect_single(self, image):
@@ -128,10 +112,9 @@ class ArucoDetector:
         rvec = rvec[0][0]
         tvec = tvec[0][0]
 
-        # Transform to ROS camera frame convention
-        rvec_world, tvec_world = self.transform_pose_to_world(rvec, tvec)
+        rvec, tvec = self.transform_pose_to_world(rvec, tvec)
 
-        return marker_id, rvec_world, tvec_world
+        return marker_id, rvec, tvec
 
     # -----------------------------------------------------------------
     def rvec_to_quaternion(self, rvec):
@@ -181,6 +164,43 @@ class ArucoDetector:
         return q  # [x, y, z, w]
 
     # -----------------------------------------------------------------
+    def transform_pose_to_world(self, rvec_cam, tvec_cam):
+        """
+        Transform from OpenCV optical frame to a frame where
+        Z points into the marker and rotated −90° around Z.
+        """
+        # Flip Z (180° about Y)
+        R_flip = np.array([
+            [-1,  0,  0],
+            [ 0,  1,  0],
+            [ 0,  0, -1]
+        ], dtype=float)
+
+        # −90° rotation around Z
+        theta = -np.pi / 2
+        R_z_neg90 = np.array([
+            [ np.cos(theta),  np.sin(theta), 0],
+            [-np.sin(theta),  np.cos(theta), 0],
+            [ 0,              0,             1]
+        ], dtype=float)
+
+        # Combine the rotations
+        R_adjust = R_flip @ R_z_neg90
+
+        # Apply to camera rotation
+        R_cam, _ = cv2.Rodrigues(rvec_cam.reshape(3,))
+        R_world = R_cam @ R_adjust
+
+        # Back to rvec
+        rvec_world, _ = cv2.Rodrigues(R_world)
+
+        # Keep same translation
+        t_world = tvec_cam.reshape(3,)
+
+        return rvec_world.reshape(3,), t_world
+
+
+    # -----------------------------------------------------------------
     def average_quaternions(self, quaternions):
         """
         Average multiple quaternions using the method from:
@@ -220,7 +240,7 @@ class ArucoDetector:
         t.header.stamp = self.node.get_clock().now().to_msg()
         t.header.frame_id = marker_pose.header.frame_id
         t.child_frame_id = frame_name
-        
+
         t.transform.translation.x = marker_pose.pose.position.x
         t.transform.translation.y = marker_pose.pose.position.y
         t.transform.translation.z = marker_pose.pose.position.z
@@ -287,14 +307,31 @@ class ArucoDetector:
         quaternions = [p['quaternion'] for p in poses]
         avg_quat = self.average_quaternions(quaternions)
 
-        # Build final PoseStamped
-        final_pose = PoseStamped()
-        final_pose.header.stamp = self.node.get_clock().now().to_msg()
-        final_pose.header.frame_id = self.camera_frame
+        # Calculate offset to move from corner to center of marker
+        # ArUco detection gives pose at top-left corner, we want center
+        offset_x = self.marker_size / 2.0  # Half marker size in X
+        offset_y = self.marker_size / 2.0  # Half marker size in Y
         
-        final_pose.pose.position.x = float(median_pos[0])
-        final_pose.pose.position.y = float(median_pos[1])
-        final_pose.pose.position.z = float(median_pos[2])
+        # Convert quaternion to rotation matrix to apply offset in marker frame
+        qw, qx, qy, qz = avg_quat[3], avg_quat[0], avg_quat[1], avg_quat[2]
+        R = np.array([
+            [1 - 2*(qy**2 + qz**2), 2*(qx*qy - qw*qz), 2*(qx*qz + qw*qy)],
+            [2*(qx*qy + qw*qz), 1 - 2*(qx**2 + qz**2), 2*(qy*qz - qw*qx)],
+            [2*(qx*qz - qw*qy), 2*(qy*qz + qw*qx), 1 - 2*(qx**2 + qy**2)]
+        ])
+        
+        # Apply offset in marker's local frame
+        offset_local = np.array([offset_x, offset_y, 0.0])
+        offset_world = R @ offset_local
+        
+        # Build final PoseStamped with centered position
+        final_pose = PoseStamped()
+        final_pose.header.stamp = rclpy.time.Time().to_msg()
+        final_pose.header.frame_id = self.camera_frame
+
+        final_pose.pose.position.x = float(median_pos[0] + offset_world[0])
+        final_pose.pose.position.y = float(median_pos[1] + offset_world[1])
+        final_pose.pose.position.z = float(median_pos[2] + offset_world[2])
         
         final_pose.pose.orientation.x = float(avg_quat[0])
         final_pose.pose.orientation.y = float(avg_quat[1])
@@ -305,6 +342,18 @@ class ArucoDetector:
 
         self.node.get_logger().info(f"Averaged {len(poses)} measurements for marker ID {marker_id}")
         self.node.get_logger().info(f"Position: [{median_pos[0]:.3f}, {median_pos[1]:.3f}, {median_pos[2]:.3f}]")
+
+        # Set frame_id to base frame for consistency
+        try:
+            final_pose = self.tf_buffer.transform(
+                final_pose, 
+                self.base_frame, 
+                timeout=rclpy.duration.Duration(seconds=2.0)
+            )
+            self.node.get_logger().info(f"Transformed to {self.base_frame}: [{final_pose.pose.position.x:.3f}, {final_pose.pose.position.y:.3f}, {final_pose.pose.position.z:.3f}]")
+        except Exception as e:
+            self.node.get_logger().error(f"Transform failed: {e}")
+            return None, -1
 
         return final_pose, marker_id
 
@@ -350,6 +399,8 @@ class ArucoDetectorNode(Node):
             response.pose = PoseStamped()
             self.get_logger().warn("No ArUco marker detected")
             return response
+
+
 
         # Publish static TF transform
         frame_name = f"aruco_marker_{marker_id}"
