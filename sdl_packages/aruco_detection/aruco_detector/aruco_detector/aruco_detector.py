@@ -386,7 +386,7 @@ class ArucoDetectorNode(Node):
 
 
         # Publish static TF transform
-        frame_name = f"aruco_marker_{marker_id}"
+        frame_name = f"aruco_marker"
         self.detector.publish_marker_frame(final_pose, frame_name)
 
         # Return response

@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     libpqxx-dev \
     libpq-dev \
+    nlohmann-json3-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # Download and install Eigen 3.3.9

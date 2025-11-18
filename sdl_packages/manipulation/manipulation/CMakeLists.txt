@@ -21,7 +21,8 @@ find_package(control_msgs REQUIRED)
 find_package(btcpp_ros2_interfaces REQUIRED)
 find_package(aruco_interfaces REQUIRED)
 find_package(franka_msgs REQUIRED)
-
+find_package(database_service_pkg REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -52,6 +53,8 @@ ament_target_dependencies(manipulation
   btcpp_ros2_interfaces
   aruco_interfaces
   franka_msgs
+  database_service_pkg
+  nlohmann_json
 )
 
 install(TARGETS

@@ -12,7 +12,9 @@ rosidl_generate_interfaces(btcpp_ros2_interfaces
     "action/ExecuteTree.action"
     "action/GoToMission.action"
     "action/Sleep.action"
-    "action/CubeVisualCalibration.action")
+    "action/CubeVisualCalibration.action"
+    "action/PickUp.action"
+    )
    
 
 ament_export_dependencies(rosidl_default_runtime)
