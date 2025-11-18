@@ -9,6 +9,9 @@
 #include <geometric_shapes/shape_operations.h>
 #include <moveit_msgs/msg/collision_object.hpp>
 
+// Json parser 
+#include <nlohmann/json.hpp>
+
 
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -24,7 +27,14 @@
 
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <control_msgs/action/follow_joint_trajectory.hpp>
+
+// Actions for movement actions
 #include <btcpp_ros2_interfaces/action/cube_visual_calibration.hpp>
+#include <btcpp_ros2_interfaces/action/pick_up.hpp>
+
+//import of the database module
+#include "database_service/database_functions.hpp"
+
 #include <aruco_interfaces/srv/aruco_detect.hpp>
 #include <franka_msgs/srv/error_recovery.hpp>
 
@@ -145,6 +155,7 @@ public:
     move_group_->setMaxVelocityScalingFactor(MAX_VELOCITY_SCALE);
     move_group_->setMaxAccelerationScalingFactor(MAX_ACCELERATION_SCALE);
     move_group_->setPlanningPipelineId("ompl");
+    move_group_->setPlannerId("RRTstar");
     move_group_->setEndEffectorLink(tcp_frame);
     
     RCLCPP_INFO(logger_, "End-effector link set to: %s", move_group_->getEndEffectorLink().c_str());
@@ -527,6 +538,9 @@ public:
   using CubeVisualCalibration = btcpp_ros2_interfaces::action::CubeVisualCalibration;
   using GoalHandleCubeVisualCalibration = rclcpp_action::ServerGoalHandle<CubeVisualCalibration>;
 
+  using PickUp = btcpp_ros2_interfaces::action::PickUp;
+  using GoalHandlePickUp = rclcpp_action::ServerGoalHandle<PickUp>;
+
   explicit ActionsManager(std::shared_ptr<Manipulator> manip)
   : manip_(manip),
     node_(manip->getNode()),
@@ -542,6 +556,15 @@ public:
       std::bind(&ActionsManager::handle_cancel_go_home, this, _1),
       std::bind(&ActionsManager::handle_accepted_go_home, this, _1)
     );
+
+    pick_up_container_server_ = rclcpp_action::create_server<PickUp>(
+      node_,
+      "pick_up_container",
+      std::bind(&ActionsManager::handle_goal_pick_up_container, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_pick_up_container, this, _1),
+      std::bind(&ActionsManager::handle_accepted_pick_up_container, this, _1)
+    );
+
 
     cube_visual_calibration_server_ = rclcpp_action::create_server<CubeVisualCalibration>(
       node_,
@@ -698,7 +721,7 @@ void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCub
     
     if (response->id != 0) {
       manip_->moveRelativeToFrame(
-        "aruco_marker_" + std::to_string(response->id),
+        "aruco_marker",
         {0, 0, -0.2, 0, 0, 0});}
     
     // Call service again for better frame
@@ -707,6 +730,160 @@ void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCub
 
 
     RCLCPP_INFO(logger_, "Detected ArUco marker ID: %d", response->id);
+    return true;
+  }
+
+  // =====================================================
+  // pick_up_container ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_pick_up_container(
+  const rclcpp_action::GoalUUID &,
+  std::shared_ptr<const PickUp::Goal> goal)
+{
+  RCLCPP_INFO(logger_, "Received goal for /pick_up_container with container_name: %s", goal->container_name.c_str());
+  
+  // Optional: validate parameter 
+
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse handle_cancel_pick_up_container(
+  const std::shared_ptr<GoalHandlePickUp>)
+{
+  RCLCPP_INFO(logger_, "Cancel request received for /pick_up_container");
+  return rclcpp_action::CancelResponse::ACCEPT;
+} 
+
+void handle_accepted_pick_up_container(const std::shared_ptr<GoalHandlePickUp> goal_handle)
+{
+  std::thread([this, goal_handle]() {
+    // Extract the 'container_name' parameter from the goal
+    const auto goal = goal_handle->get_goal();
+    std::string container_name = goal->container_name;
+
+    
+    auto result = std::make_shared<PickUp::Result>();
+    bool success = pick_up_container(container_name);  // Pass container_name to the function
+
+    result->message = success 
+      ? "Pick up container completed successfully for " + container_name
+      : "Pick up container failed for " + container_name ;
+
+    if (success)
+      goal_handle->succeed(result);
+    else
+      goal_handle->abort(result);
+  }).detach();
+}
+
+void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
+{
+  RCLCPP_INFO(logger_, "Pick up container canceled");
+}
+
+  bool pick_up_container(const std::string& container_name) {
+    // Run only after calibrating the camera and detecting reference aruco marker
+    std::string slot_transform = database_lib::getContainerLocationTransform(container_name);
+
+    RCLCPP_INFO(logger_, "Picking up container: %s from slot: %s", container_name.c_str(), slot_transform.c_str());
+
+    std::string transform = database_lib::getContainerLocationTransform(container_name);
+    // Initialize coordinates
+    double x = 0.0, y = 0.0, z = 0.0;
+    std::string slot;
+    if (!transform.empty()) {
+        try {
+            // Parse JSON
+            auto json = nlohmann::json::parse(transform);
+            
+            // Extract values
+            x = json["translation"][0];
+            y = json["translation"][1];
+            z = json["translation"][2];
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+            return false;
+        }
+    }
+    
+    RCLCPP_INFO(logger_, "Container coordinates: x=%.3f, y=%.3f, z=%.3f", x, y, z);
+    
+    // Open gripper
+    manip_->MoveGripper(0.04, 0.04); // open
+    
+    // Move above the container
+    manip_->planCartesianPath(
+      "aruco_marker",
+      {x, y, z, 0, 0, 0});
+    
+      
+    // Move down to pick up
+    manip_->planCartesianPath(
+      "aruco_marker",
+      {x, y, z + 0.01, 0, 0, 0});
+    
+    // Close gripper
+    manip_->MoveGripper(0.031, 0.031); // close
+
+    // Move up with container
+    manip_->planCartesianPath(
+      "aruco_marker",
+      {x, y, z - 0.2, 0, 0, 0});
+
+    manip_->planCartesianPath(
+      "aruco_marker",
+      {0, 0, -0.1, 0, 0, 0});
+
+    manip_->planCartesianPath(
+      "mir_storage_lookout",
+      {0, 0, -0.3, 0, 0, 0});
+
+    // get free slot on mir
+    transform = database_lib::getFreeSlot("storage_mir");
+    if (!transform.empty()) {
+        try {
+            // Parse JSON
+            auto json = nlohmann::json::parse(transform);
+            
+            // Extract values
+            x = json["translation"][0];
+            y = json["translation"][1];
+            slot = json["slot"];
+            RCLCPP_INFO(logger_, "Free slot coordinates on MIR: x=%.3f, y=%.3f", x, y);
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+            return false;
+        }
+    }
+
+    manip_->planCartesianPath(
+      "mir_storage_lookout",
+      {0, 0, -0.15, 0, 0, 0});
+
+    // Move above the free slot
+    manip_->planCartesianPath(
+      "mir_storage_lookout",
+      {x, y, 0, 0, 0, 0});
+
+    manip_->planCartesianPath(
+      "mir_storage_lookout",
+      {x, y, 0.04, 0, 0, 0});
+    
+    manip_->MoveGripper(0.04, 0.04); // open
+
+    // Move up from slot
+    manip_->planCartesianPath(
+      "mir_storage_lookout",
+      {x, y, -0.2, 0, 0, 0});
+
+    // Move back to lookout
+    manip_->planCartesianPath(
+      "mir_storage_lookout",
+      {0, 0, 0, 0, 0, 0});
+    
+    // Update database with new location of container
+    database_lib::updateContainerLocationByName(container_name, slot);
+
     return true;
   }
 
@@ -765,17 +942,28 @@ void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCub
 
     {0.5457112110790452, -1.058295548321908, -0.974057254075288, -2.376992587319951, -0.6909174268972457, 1.4805916281373137, 0.7302634253524906},
 
-  {1.2195870974746175, -0.5894056424544509, -1.5358369686227096, -1.9080860292357962, -0.550409801337454, 1.557894101301829, 0.6976626893482457},
-  
-  {0.934879883222396, -1.2257907931205985, -0.49502804495995506, -2.524067088989393, -0.7400466033510504, 1.3365063954989114, 1.3470015028533007},
-  
-  {0.9561815292040506, -1.6257404654988072, -0.32334264627823434, -2.5262677478121036, -0.7329317413552985, 0.8668012846163663, 1.3606218857566748},
-  };
+    {1.2195870974746175, -0.5894056424544509, -1.5358369686227096, -1.9080860292357962, -0.550409801337454, 1.557894101301829, 0.6976626893482457},
+    
+    {0.934879883222396, -1.2257907931205985, -0.49502804495995506, -2.524067088989393, -0.7400466033510504, 1.3365063954989114, 1.3470015028533007},
+    
+    {0.9561815292040506, -1.6257404654988072, -0.32334264627823434, -2.5262677478121036, -0.7329317413552985, 0.8668012846163663, 1.3606218857566748},
+    
+    {0.02303688696784931, -0.6294210436218663, -0.21855986548222417, -3.0021031826755458, -0.13720868384253365, 2.3655701474268285, 0.7326655218047335},
+    
+    {0.22439140328213908, -0.8472639738230537, -0.8509403464344185, 0.24333090540622718, -2.9976577653380487, -0.25523665064119094, 2.0755284628868105},
+    
+    {0.18664259405303416, -0.04316601663618756, 0.29256964226903615, -2.4260223022594785, -0.3419225723737988, 1.8063921850522358, 1.6177049934284553},
+
+    {0.17331087047384497, -0.5185814182271024, -1.0775161238801558, -2.6951875708209165, -0.23242444313590568, 2.24199344699356, -0.020242639068108435},
+
+    {-0.11038419190257978, -1.1250621762861286, -1.1853025407456512, -2.2074533762334356, -0.4747146641545825, 1.4641865207354228, 0.09361964726613872}};
 
 
     for (const auto& joint_target : joint_target_list) {
+      manip_->recover();
       manip_->moveToJointPosition(joint_target);
-      rclcpp::sleep_for(std::chrono::seconds(2));
+      rclcpp::sleep_for(std::chrono::seconds(4));
+      manip_->recover();
     }
 
     manip_->moveToJointPosition(initial_joints);
@@ -840,7 +1028,6 @@ void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCub
 
     return true;
   }
-
   
 
   // =====================================================
@@ -850,6 +1037,7 @@ void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCub
   rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
   rclcpp_action::Server<GoHome>::SharedPtr go_home_server_;
+  rclcpp_action::Server<PickUp>::SharedPtr pick_up_container_server_;
   rclcpp_action::Server<CubeVisualCalibration>::SharedPtr cube_visual_calibration_server_;
   rclcpp_action::Server<CameraCalibration>::SharedPtr camera_calibration_server_;
   rclcpp_action::Server<MoveBoxPosOnRobot>::SharedPtr move_box_pos_on_robot_server_;

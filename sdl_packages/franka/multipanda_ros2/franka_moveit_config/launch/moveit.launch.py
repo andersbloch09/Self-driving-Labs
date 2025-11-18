@@ -320,7 +320,7 @@ def generate_launch_description():
     executable='static_transform_publisher',
     name='handeye_static_tf',
     arguments=[
-        '0.03066680', '-0.03321220', '-0.05945720', '0.01428107', '0.01096216', '0.69356383', '0.72017018',  # qx qy qz qw
+        '0.03472320', '-0.03317720', '-0.03251260', '0.00496313', '0.00375580', '0.70042351', '0.71370034',  # qx qy qz qw
         'panda_hand_tcp', 'camera_link_calibrated'  # parent, child
         ]
     )
