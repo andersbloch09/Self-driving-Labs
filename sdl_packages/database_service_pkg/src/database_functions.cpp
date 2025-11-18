@@ -59,7 +59,7 @@ std::string DatabaseHelpers::getFreeSlot(const std::string& storage_object_name)
         
         // Query to find the first available slot in the specified storage object
         std::string query = R"(
-            SELECT s.transform_to_object 
+            SELECT s.transform_to_object
             FROM slots s
             JOIN storage_objects so ON s.storage_object_id = so.id
             WHERE so.name = )" + transaction.quote(storage_object_name) + R"(

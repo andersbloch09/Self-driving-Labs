@@ -19,6 +19,8 @@
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>control_msgs</depend>
+  <depend>database_service_pkg</depend>
+  <depend>nlohmann-json-dev</depend>
   <build_depend>btcpp_ros2_interfaces</build_depend>
   <exec_depend>btcpp_ros2_interfaces</exec_depend>
   <build_depend>aruco_interfaces</build_depend>
