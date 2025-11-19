@@ -5,6 +5,9 @@ joint_limits:
     has_acceleration_limits: true
     max_acceleration: 3.0
   panda_joint2:
+    has_position_limits: true
+    min_position: -1.2
+    max_position: 1.76
     has_velocity_limits: true
     max_velocity: 2.0
     has_acceleration_limits: true
