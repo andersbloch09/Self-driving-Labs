@@ -1,12 +1,31 @@
  <root BTCPP_format="4" >
      <BehaviorTree ID="BT_Test">
         <Sequence name="root_sequence">
-            <GoToMission   name="go_to_storage" 
-                          action_name="go_to_mission"
-                          mission_id="94c9f0cf-a4f7-11f0-b2e5-000e8e984489" />
-            <GoToMission    name="go_to_opentrons2" 
-                           action_name="go_to_mission"
-                           mission_id="a5c110d4-a4f7-11f0-b2e5-000e8e984489" />
+            <!-- Move MiR to storage location -->
+            <GoToMission name="go_to_storage" 
+                        action_name="go_to_mission"
+                        mission_id="94c9f0cf-a4f7-11f0-b2e5-000e8e984489" />
+            
+            <!-- Home the Franka manipulator -->
+            <FrankaTrajectoryAction name="go_home"
+                                   action_name="go_home" />
+            
+            <!-- Calibrate camera using left side of cube -->
+            <FrankaCalibrationAction name="cube_calibrate_left"
+                                    action_name="cube_visual_calibration"
+                                    side="left" />
+            
+            <!-- Pick up Container1 -->
+            <PickUpAction name="pick_container1"
+                         action_name="pick_up_container"
+                         container_name="Container1" />
+            
+            <!-- Place Container1 -->
+            <PlaceAction name="place_container1"
+                        action_name="place_container"
+                        container_name="Container1" />
+            
+            <!-- Return MiR to home position -->
             <GoToMission name="go_to_home" 
                         action_name="go_to_mission"
                         mission_id="76638485-a4f7-11f0-b2e5-000e8e984489" />

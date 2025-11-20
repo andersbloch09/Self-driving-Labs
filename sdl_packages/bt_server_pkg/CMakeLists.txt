@@ -57,7 +57,7 @@ function(create_franka_bt_plugin plugin_name source_file)
   )
   target_compile_definitions(${plugin_name} PRIVATE BT_PLUGIN_EXPORT)
   ament_target_dependencies(${plugin_name} 
-    rclcpp rclcpp_action behaviortree_ros2 control_msgs pluginlib
+    rclcpp rclcpp_action behaviortree_ros2 control_msgs btcpp_ros2_interfaces pluginlib
   )
 endfunction()
 
@@ -68,7 +68,10 @@ create_bt_plugin(GoToMission src/GoToMission.cpp)
 create_ot2_bt_plugin(OpenTrons2RunProtocol src/opentrons2_run_protocol.cpp)
 
 # Create Franka plugins
-create_franka_bt_plugin(FrankaAction src/franka_action.cpp)
+create_franka_bt_plugin(FrankaTrajectoryAction src/FrankaTrajectoryAction.cpp)
+create_franka_bt_plugin(FrankaCalibrationAction src/FrankaCalibrationAction.cpp)
+create_franka_bt_plugin(PickUpAction src/PickUpAction.cpp)
+create_franka_bt_plugin(PlaceAction src/PlaceAction.cpp)
 
 # Main executable (simplified dependencies)
 add_executable(bt_server src/bt_server.cpp)
@@ -80,10 +83,10 @@ ament_target_dependencies(bt_server
 install(TARGETS bt_server DESTINATION lib/${PROJECT_NAME})
 
 # Install plugin libraries
-install(TARGETS GoToMission OpenTrons2RunProtocol FrankaAction
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction
   DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS GoToMission OpenTrons2RunProtocol FrankaAction
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction
   DESTINATION share/${PROJECT_NAME}/plugins
 )
 

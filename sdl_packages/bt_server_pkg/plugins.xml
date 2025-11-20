@@ -2,3 +2,34 @@
   <class type="GoToMission" base_class_type="BT::TreeNode">
     <description>Sends the MiR robot to mission_id location</description>
   </class>
+</library>
+
+<library path="OpenTrons2RunProtocol">
+  <class type="OpenTrons2RunProtocol" base_class_type="BT::TreeNode">
+    <description>Runs a protocol on OpenTrons2</description>
+  </class>
+</library>
+
+<library path="FrankaTrajectoryAction">
+  <class type="FrankaTrajectoryAction" base_class_type="BT::TreeNode">
+    <description>Executes Franka trajectory actions (go_home)</description>
+  </class>
+</library>
+
+<library path="FrankaCalibrationAction">
+  <class type="FrankaCalibrationAction" base_class_type="BT::TreeNode">
+    <description>Executes Franka cube visual calibration</description>
+  </class>
+</library>
+
+<library path="PickUpAction">
+  <class type="PickUpAction" base_class_type="BT::TreeNode">
+    <description>Picks up a container using Franka manipulator</description>
+  </class>
+</library>
+
+<library path="PlaceAction">
+  <class type="PlaceAction" base_class_type="BT::TreeNode">
+    <description>Places a container using Franka manipulator</description>
+  </class>
+</library>
