@@ -20,7 +20,7 @@ source install/setup.bash
 
 # Full build, use other command for lower memory
 #colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 1
 
 source install/setup.bash
 

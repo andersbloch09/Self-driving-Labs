@@ -977,10 +977,9 @@ void handle_accepted_place_container(const std::shared_ptr<GoalHandlePlaceContai
     // Extract the 'container_name' parameter from the goal
     const auto goal = goal_handle->get_goal();
     std::string container_name = goal->container_name;
-    std::string place_slot = goal->place_slot;
     
     auto result = std::make_shared<PlaceContainer::Result>();
-    bool success = place_container(container_name, place_slot);  // Pass container_name and place_slot to the function
+    bool success = place_container(container_name);  // Pass container_name to the function
 
     result->message = success 
       ? "Place container completed successfully for " + container_name
@@ -992,7 +991,7 @@ void handle_accepted_place_container(const std::shared_ptr<GoalHandlePlaceContai
   }).detach();
 }
 
-void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
+void handle_canceled_place_container(const std::shared_ptr<GoalHandlePlaceContainer>)
 {
   RCLCPP_INFO(logger_, "Place container canceled");
 }
@@ -1013,17 +1012,17 @@ bool place_container(const std::string& container_name) {
   // Initialize coordinates
   double x = 0.0, y = 0.0;
   if (!transform.empty()) {
-      try {
-          // Parse JSON
-          auto json = nlohmann::json::parse(transform);
-          
-          // Extract values
-          x = json["translation"][0];
-          y = json["translation"][1];
-      } catch (const std::exception& e) {
-          RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
-          return false;
-      }
+    try {
+      // Parse JSON
+      auto json = nlohmann::json::parse(transform);
+      
+      // Extract values
+      x = json["translation"][0];
+      y = json["translation"][1];
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+      return false;
+    }
   }
   
   RCLCPP_INFO(logger_, "Container coordinates: x=%.3f, y=%.3f", x, y);
@@ -1032,39 +1031,40 @@ bool place_container(const std::string& container_name) {
   manip_->planCartesianPath(
     "mir_storage_lookout",
     {x, y, 0, 0, 0, 0});
-  
     
-  // Move down to grasp
-  manip_->planCartesianPath(
+    
+    // Move down to grasp
+    manip_->planCartesianPath(
     "mir_storage_lookout",
     {x, y, 0.04, 0, 0, 0});
   
   // Open gripper to release
   manip_->MoveGripper(0.031, 0.031); // open
-
+  
   // Move up from slot
   manip_->planCartesianPath(
     "mir_storage_lookout",
     {x, y, -0.2, 0, 0, 0});
-
-  
-  // Move back to lookout
+    
+    
+    // Move back to lookout
   manip_->planCartesianPath(
     "mir_storage_lookout",
     {0, 0, -0.3, 0, 0, 0});
-
+    
   // move to aruco marker frame
   manip_->planCartesianPath(
     "aruco_marker",
     {0, 0, -0.2, 0, 0, 0});
-
-  // get free slot on mir
-  transform = database_lib::getFreeSlot("storage_mir");
-  if (!transform.empty()) {
+    
+    // get free slot on mir
+    transform = database_lib::getFreeSlot("storage_jig_A");
+    std::string slot;
+    if (!transform.empty()) {
       try {
-          // Parse JSON
-          auto json = nlohmann::json::parse(transform);
-          
+        // Parse JSON
+        auto json = nlohmann::json::parse(transform);
+        
           // Extract values
           x = json["translation"][0];
           y = json["translation"][1];
