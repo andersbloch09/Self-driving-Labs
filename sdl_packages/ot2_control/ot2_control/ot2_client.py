@@ -201,11 +201,11 @@ class OT2Client:
     
 
 
-    def run_protocol(self, node, protocol_path: str, custom_labware_folder: str = None):
+    def run_protocol(self, node, protocol_path: str, custom_labware_folder: str = None, params: dict = {}) -> tuple:
         """Upload, create, start, and monitor a protocol until completion."""
         custom_labware = self.verify_labware(node, protocol_path, custom_labware_folder)
         protocol_id = self.upload_protocol(node, protocol_path, custom_labware)
-        run_id = self.create_run(node, protocol_id)
+        run_id = self.create_run(node, protocol_id, params)
         labware = self.get_labware_used(protocol_id, run_id)
         self.start_run(node, run_id)
         status = self.get_run_status(run_id)
@@ -251,3 +251,13 @@ class OT2Client:
             time.sleep(interval)
             self.turn_lights_off()
             time.sleep(interval)
+    
+    def get_finished(self, run_id):
+        resp = requests.get(f"{self.base_url}/runs/{run_id}/commands", headers=self.headers)
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        results = [
+            {"id": cmd["id"], "commandType": cmd["commandType"], "params": cmd["params"]}
+            for cmd in data
+        ]
+        return results

@@ -1,12 +1,14 @@
 # Goal
 string protocol_path
 string custom_labware_folder
+string parameters_json
 
 ---
 # Result
 bool success
 string message
 string final_status
+string comments
 
 ---
 # Feedback
