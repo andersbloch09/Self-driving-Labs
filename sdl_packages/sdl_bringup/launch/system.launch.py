@@ -22,7 +22,8 @@ def generate_launch_description():
     ),
         launch_arguments={
             'robot_ip': '192.168.0.30',
-            'load_gripper': 'true'
+            'load_gripper': 'true',
+            'use_rviz': 'false',
         }.items()
     )
 
