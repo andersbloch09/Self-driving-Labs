@@ -31,6 +31,7 @@
 // Actions for movement actions
 #include <btcpp_ros2_interfaces/action/cube_visual_calibration.hpp>
 #include <btcpp_ros2_interfaces/action/pick_up.hpp>
+#include <btcpp_ros2_interfaces/action/place.hpp>
 
 //import of the database module
 #include "database_service/database_functions.hpp"
@@ -44,7 +45,7 @@
 
 
 static const double PLANNING_TIME_S = 25.0;
-static const double MAX_VELOCITY_SCALE = 0.1;  // Even slower - 1% of max velocity
+static const double MAX_VELOCITY_SCALE = 0.3;  // Even slower - 1% of max velocity
 static const double MAX_ACCELERATION_SCALE = 0.1;  // Even slower - 1% of max acceleration
 static const unsigned int PLANNING_ATTEMPTS = 10;
 static const double GOAL_TOLERANCE = 1e-3;
@@ -95,6 +96,14 @@ bool allClose(const geometry_msgs::msg::PoseStamped& goal, const geometry_msgs::
 class Manipulator
 {
 public:
+  struct ObjectModel {
+    std::string mesh;
+    std::array<double,3> pos;
+    std::array<double,3> rpy;
+  };
+
+  std::map<int, ObjectModel> object_map;
+
   Manipulator()
   : node_(std::make_shared<rclcpp::Node>("manipulator")),
     logger_(node_->get_logger()),
@@ -155,7 +164,7 @@ public:
     move_group_->setMaxVelocityScalingFactor(MAX_VELOCITY_SCALE);
     move_group_->setMaxAccelerationScalingFactor(MAX_ACCELERATION_SCALE);
     move_group_->setPlanningPipelineId("ompl");
-    move_group_->setPlannerId("RRTstar");
+    move_group_->setPlannerId("geometric::RRTstar");
     move_group_->setEndEffectorLink(tcp_frame);
     
     RCLCPP_INFO(logger_, "End-effector link set to: %s", move_group_->getEndEffectorLink().c_str());
@@ -175,9 +184,18 @@ public:
       RCLCPP_INFO(logger_, "  Joint %zu: %.3f", i, joints[i]);
     }
 
-    // Get pose after movement
-    auto final_pose = move_group_->getCurrentPose();
-    printPose(final_pose);
+    object_map[1] = {
+      "package://manipulation/env_meshes/storage_board.stl",
+      {0.0, 0.0, 0.0},       // position
+      {0.0, 0.0, 0.0}         // orientation (RPY)
+    };
+
+    object_map[2] = {
+      "package://manipulation/env_meshes/OT2_ref.stl",
+      {0.0, 0.0, 0.0},        // position
+      {0.0, 0.0, 0.0}          // orientation (RPY)
+    };
+
     
     RCLCPP_INFO(logger_, "manipulation completed!");
   }
@@ -212,7 +230,7 @@ void addCollisionMesh(
   shapes::Mesh* mesh = shapes::createMeshFromResource(mesh_path);
   if (!mesh)
   {
-    RCLCPP_ERROR(logger_, "❌ Failed to load mesh: %s", mesh_path.c_str());
+    RCLCPP_ERROR(logger_, "Failed to load mesh: %s", mesh_path.c_str());
     return;
   }
 
@@ -226,9 +244,42 @@ void addCollisionMesh(
 
   planning_scene_interface.applyCollisionObjects({object});
 
-  RCLCPP_INFO(logger_, "✅ Added object [%s] to planning scene", object_id.c_str());
+  RCLCPP_INFO(logger_, "Added object [%s] to planning scene", object_id.c_str());
 }
 
+void spawnObjectById(int id)
+{
+    if (object_map.find(id) == object_map.end()) {
+        RCLCPP_WARN(logger_, "No object mapped for ArUco ID %d", id);
+        return;
+    }
+
+    const auto &obj = object_map[id];
+
+    // Build pose from object_map entry
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = obj.pos[0];
+    pose.position.y = obj.pos[1];
+    pose.position.z = obj.pos[2];
+
+    tf2::Quaternion q;
+    q.setRPY(obj.rpy[0], obj.rpy[1], obj.rpy[2]);
+    pose.orientation = tf2::toMsg(q);
+
+    // Add to planning scene
+    addCollisionMesh(
+        "object_" + std::to_string(id),   // unique name
+        obj.mesh,                         // STL path
+        pose,                             // pose of object
+        "aruco_marker"                     // frame (default)
+    );
+
+    RCLCPP_INFO(
+        logger_, 
+        "Spawned object for ID %d using mesh: %s",
+        id, obj.mesh.c_str()
+    );
+}
 
 std::pair<bool, bool> moveRelativeToFrame(
     const std::string& frame_id,
@@ -541,6 +592,9 @@ public:
   using PickUp = btcpp_ros2_interfaces::action::PickUp;
   using GoalHandlePickUp = rclcpp_action::ServerGoalHandle<PickUp>;
 
+  using PlaceContainer = btcpp_ros2_interfaces::action::Place;
+  using GoalHandlePlaceContainer = rclcpp_action::ServerGoalHandle<PlaceContainer>;
+
   explicit ActionsManager(std::shared_ptr<Manipulator> manip)
   : manip_(manip),
     node_(manip->getNode()),
@@ -555,6 +609,14 @@ public:
       std::bind(&ActionsManager::handle_goal_go_home, this, _1, _2),
       std::bind(&ActionsManager::handle_cancel_go_home, this, _1),
       std::bind(&ActionsManager::handle_accepted_go_home, this, _1)
+    );
+
+    place_container_server_ = rclcpp_action::create_server<PlaceContainer>(
+      node_,
+      "place_container",
+      std::bind(&ActionsManager::handle_goal_place_container, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_place_container, this, _1),
+      std::bind(&ActionsManager::handle_accepted_place_container, this, _1)
     );
 
     pick_up_container_server_ = rclcpp_action::create_server<PickUp>(
@@ -718,6 +780,7 @@ void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCub
       return false;
     }
     
+    manip_->spawnObjectById(response->id);
     
     if (response->id != 0) {
       manip_->moveRelativeToFrame(
@@ -887,6 +950,161 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     return true;
   }
 
+  // =====================================================
+  // place_container ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_place_container(
+  const rclcpp_action::GoalUUID &,
+  std::shared_ptr<const PlaceContainer::Goal> goal)
+{
+  RCLCPP_INFO(logger_, "Received goal for /place_container with container_name: %s", goal->container_name.c_str());
+  
+  // Optional: validate parameter 
+
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse handle_cancel_place_container(
+  const std::shared_ptr<GoalHandlePlaceContainer>)
+{
+  RCLCPP_INFO(logger_, "Cancel request received for /place_container");
+  return rclcpp_action::CancelResponse::ACCEPT;
+} 
+
+void handle_accepted_place_container(const std::shared_ptr<GoalHandlePlaceContainer> goal_handle)
+{
+  std::thread([this, goal_handle]() {
+    // Extract the 'container_name' parameter from the goal
+    const auto goal = goal_handle->get_goal();
+    std::string container_name = goal->container_name;
+    
+    auto result = std::make_shared<PlaceContainer::Result>();
+    bool success = place_container(container_name);  // Pass container_name to the function
+
+    result->message = success 
+      ? "Place container completed successfully for " + container_name
+      : "Place container failed for " + container_name ;
+    if (success)
+      goal_handle->succeed(result);
+    else
+      goal_handle->abort(result);
+  }).detach();
+}
+
+void handle_canceled_place_container(const std::shared_ptr<GoalHandlePlaceContainer>)
+{
+  RCLCPP_INFO(logger_, "Place container canceled");
+}
+
+bool place_container(const std::string& container_name) {
+  // Run only after calibrating the camera and detecting reference aruco marker
+  RCLCPP_INFO(logger_, "Placing container: %s", container_name.c_str());
+  // Open gripper
+  manip_->MoveGripper(0.04, 0.04); // open
+
+  // Move to lookout
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {0, 0, -0.3, 0, 0, 0});
+
+  // get container location from database
+  std::string transform = database_lib::getContainerLocationTransform(container_name);
+  // Initialize coordinates
+  double x = 0.0, y = 0.0;
+  if (!transform.empty()) {
+    try {
+      // Parse JSON
+      auto json = nlohmann::json::parse(transform);
+      
+      // Extract values
+      x = json["translation"][0];
+      y = json["translation"][1];
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+      return false;
+    }
+  }
+  
+  RCLCPP_INFO(logger_, "Container coordinates: x=%.3f, y=%.3f", x, y);
+  
+  // Move above the container slot
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {x, y, 0, 0, 0, 0});
+    
+    
+    // Move down to grasp
+    manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {x, y, 0.04, 0, 0, 0});
+  
+  // Open gripper to release
+  manip_->MoveGripper(0.031, 0.031); // open
+  
+  // Move up from slot
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {x, y, -0.2, 0, 0, 0});
+    
+    
+    // Move back to lookout
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {0, 0, -0.3, 0, 0, 0});
+    
+  // move to aruco marker frame
+  manip_->planCartesianPath(
+    "aruco_marker",
+    {0, 0, -0.2, 0, 0, 0});
+    
+    // get free slot on mir
+    transform = database_lib::getFreeSlot("storage_jig_A");
+    std::string slot;
+    if (!transform.empty()) {
+      try {
+        // Parse JSON
+        auto json = nlohmann::json::parse(transform);
+        
+          // Extract values
+          x = json["translation"][0];
+          y = json["translation"][1];
+          slot = json["slot"];
+          RCLCPP_INFO(logger_, "Free slot coordinates on MIR: x=%.3f, y=%.3f", x, y);
+      } catch (const std::exception& e) {
+          RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+          return false;
+      }
+  }
+
+  manip_->planCartesianPath(
+    "aruco_marker",
+    {x, y, -0.1, 0, 0, 0});
+
+  manip_->planCartesianPath(
+    "aruco_marker",
+    {x, y, 0.01, 0, 0, 0});
+
+  manip_->MoveGripper(0.04, 0.04); // open
+
+  // Move up from slot
+  manip_->planCartesianPath(
+    "aruco_marker",
+    {x, y, -0.2, 0, 0, 0});
+
+  manip_->planCartesianPath(
+    "aruco_marker",
+    {0, 0, -0.2, 0, 0, 0});
+
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {0, 0, -0.3, 0, 0, 0});
+
+  // Update database with new location of container
+  database_lib::updateContainerLocationByName(container_name, slot);
+
+  return true;
+}
+
 
   // =====================================================
   // camera_calibration ACTION
@@ -1038,6 +1256,7 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
   rclcpp::Logger logger_;
   rclcpp_action::Server<GoHome>::SharedPtr go_home_server_;
   rclcpp_action::Server<PickUp>::SharedPtr pick_up_container_server_;
+  rclcpp_action::Server<PlaceContainer>::SharedPtr place_container_server_;
   rclcpp_action::Server<CubeVisualCalibration>::SharedPtr cube_visual_calibration_server_;
   rclcpp_action::Server<CameraCalibration>::SharedPtr camera_calibration_server_;
   rclcpp_action::Server<MoveBoxPosOnRobot>::SharedPtr move_box_pos_on_robot_server_;
