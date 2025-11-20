@@ -45,10 +45,12 @@ class OT2Manager(Node):
 
         protocol_path = goal_handle.request.protocol_path
         custom_labware_folder = goal_handle.request.custom_labware_folder
+        parameters_json = goal_handle.request.parameters_json
+        params = json.loads(parameters_json)
 
         # Example: start your OT2 run
         self.lights = self.client.turn_lights_on()
-        self.status, self.current_run_id, self.current_protocol_id, self.labware = self.client.run_protocol(self, protocol_path, custom_labware_folder)
+        self.status, self.current_run_id, self.current_protocol_id, self.labware = self.client.run_protocol(self, protocol_path, custom_labware_folder, params)
         self.get_logger().info(f"Started OT-2 protocol with run ID: {self.current_run_id}")
         done_commands = []
         while rclpy.ok():
@@ -83,11 +85,28 @@ class OT2Manager(Node):
             #Check if OT-2 finished normally
             if current_status == "succeeded":
                 self.client.blink_lights(3, 0.5)
-                print(json.dumps(results, indent=2))
+
+                for attempt in range(5):
+                    commands = self.client.get_finished(self.current_run_id)
+                    if commands:
+                        break
+                    time.sleep(2)
+
+                comment_messages = [
+                    cmd["params"]["message"]
+                    for cmd in commands
+                    if cmd.get("commandType") == "comment"
+                ]
+
+                comment_messages_str = json.dumps(comment_messages, indent=2)
+
+                #print(json.dumps(results, indent=2))
                 self.get_logger().info("Goal completed successfully")
                 goal_handle.succeed()
                 result.success = True
                 result.message = "Completed successfully"
+                result.final_status = current_status
+                result.comments = comment_messages_str
                 # Before returning
                 self.active_goal = None
                 return result
