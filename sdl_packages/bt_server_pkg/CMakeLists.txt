@@ -70,6 +70,8 @@ create_ot2_bt_plugin(OpenTrons2RunProtocol src/opentrons2_run_protocol.cpp)
 # Create Franka plugins
 create_franka_bt_plugin(FrankaTrajectoryAction src/FrankaTrajectoryAction.cpp)
 create_franka_bt_plugin(FrankaCalibrationAction src/FrankaCalibrationAction.cpp)
+create_franka_bt_plugin(PickUpAction src/PickUpAction.cpp)
+create_franka_bt_plugin(PlaceAction src/PlaceAction.cpp)
 
 # Main executable (simplified dependencies)
 add_executable(bt_server src/bt_server.cpp)
@@ -81,10 +83,10 @@ ament_target_dependencies(bt_server
 install(TARGETS bt_server DESTINATION lib/${PROJECT_NAME})
 
 # Install plugin libraries
-install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction
   DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction
   DESTINATION share/${PROJECT_NAME}/plugins
 )
 

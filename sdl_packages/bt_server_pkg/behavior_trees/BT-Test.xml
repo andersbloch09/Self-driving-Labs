@@ -16,14 +16,14 @@
                                     side="left" />
             
             <!-- Pick up Container1 -->
-            <FrankaTrajectoryAction name="pick_container1"
-                                   action_name="pick"
-                                   container_name="Container1" />
+            <PickUpAction name="pick_container1"
+                         action_name="pick_up_container"
+                         container_name="Container1" />
             
             <!-- Place Container1 -->
-            <FrankaTrajectoryAction name="place_container1"
-                                   action_name="place"
-                                   container_name="Container1" />
+            <PlaceAction name="place_container1"
+                        action_name="place_container"
+                        container_name="Container1" />
             
             <!-- Return MiR to home position -->
             <GoToMission name="go_to_home" 

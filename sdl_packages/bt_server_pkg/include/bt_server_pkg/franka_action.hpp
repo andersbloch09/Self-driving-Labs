@@ -3,6 +3,8 @@
 #include "behaviortree_ros2/bt_action_node.hpp"
 #include "control_msgs/action/follow_joint_trajectory.hpp"
 #include "btcpp_ros2_interfaces/action/cube_visual_calibration.hpp"
+#include "btcpp_ros2_interfaces/action/pick_up.hpp"
+#include "btcpp_ros2_interfaces/action/place.hpp"
 
 using namespace BT;
 
@@ -62,6 +64,56 @@ public:
     {
         return providedBasicPorts({
             InputPort<std::string>("side", "left", "Side of the cube for calibration (left/right)")
+        });
+    }
+
+    bool setGoal(Goal& goal) override;
+    NodeStatus onResultReceived(const WrappedResult& result) override;
+    NodeStatus onFailure(ActionNodeErrorCode error) override;
+    void onHalt() override;
+};
+
+// =============================================================================
+// Pick Up Action (for picking up containers)
+// =============================================================================
+class PickUpAction 
+    : public RosActionNode<btcpp_ros2_interfaces::action::PickUp>,
+      public FrankaActionBase
+{
+public:
+    PickUpAction(const std::string& name, const NodeConfig& config, const RosNodeParams& params)
+        : RosActionNode<btcpp_ros2_interfaces::action::PickUp>(name, config, params)
+    {}
+
+    static PortsList providedPorts()
+    {
+        return providedBasicPorts({
+            InputPort<std::string>("container_name", "Container name for pick operation")
+        });
+    }
+
+    bool setGoal(Goal& goal) override;
+    NodeStatus onResultReceived(const WrappedResult& result) override;
+    NodeStatus onFailure(ActionNodeErrorCode error) override;
+    void onHalt() override;
+};
+
+// =============================================================================
+// Place Action (for placing containers)
+// =============================================================================
+class PlaceAction 
+    : public RosActionNode<btcpp_ros2_interfaces::action::Place>,
+      public FrankaActionBase
+{
+public:
+    PlaceAction(const std::string& name, const NodeConfig& config, const RosNodeParams& params)
+        : RosActionNode<btcpp_ros2_interfaces::action::Place>(name, config, params)
+    {}
+
+    static PortsList providedPorts()
+    {
+        return providedBasicPorts({
+            InputPort<std::string>("container_name", "Container name for place operation")
         });
     }
 
