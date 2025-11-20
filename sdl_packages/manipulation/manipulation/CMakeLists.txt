@@ -62,5 +62,11 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(
+  DIRECTORY env_meshes/
+  DESTINATION share/${PROJECT_NAME}/env_meshes
+)
+
+
 
 ament_package()

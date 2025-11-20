@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
     net-tools \
     inetutils-ping \
-    ros-humble-gazebo-ros-pkgs \
     ros-humble-moveit \
     ros-humble-moveit-common \
     ros-humble-moveit-ros-planning \
