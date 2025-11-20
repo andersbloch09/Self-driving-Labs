@@ -179,6 +179,13 @@ def generate_launch_description():
         ],
     )
 
+    use_rviz_arg = DeclareLaunchArgument(
+        'use_rviz',
+        default_value='true',
+        description='Whether to launch RViz'
+    )
+    use_rviz = LaunchConfiguration('use_rviz')
+
     # RViz
     rviz_base = os.path.join(get_package_share_directory('franka_moveit_config'), 'rviz')
     rviz_full_config = os.path.join(rviz_base, 'moveit.rviz')
@@ -195,6 +202,7 @@ def generate_launch_description():
             ompl_planning_pipeline_config,
             kinematics_yaml,
         ],
+        condition=IfCondition(LaunchConfiguration('use_rviz'))
     )
 
     # Publish TF
@@ -283,6 +291,7 @@ def generate_launch_description():
             description='Use Franka Gripper as an end-effector, otherwise, the robot is loaded '
                         'without an end-effector.')
     
+    
     fake_sensor_commands_arg = DeclareLaunchArgument(
         fake_sensor_commands_parameter_name,
         default_value='false',
@@ -332,6 +341,7 @@ def generate_launch_description():
          fake_sensor_commands_arg,
          load_gripper_arg,
          db_arg,
+         use_rviz_arg,
          rviz_node,
          robot_state_publisher,
          handeye_tf,

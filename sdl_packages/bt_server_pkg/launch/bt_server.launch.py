@@ -21,28 +21,12 @@ def generate_launch_description():
         ),
         
         # OpenTrons2 Manager (action server)
-        Node(
-            package='ot2_control',
-            executable='ot2_manager.py',
-            name='ot2_manager',
-            output='screen'
-        ),
-        
-        # Franka MoveIt launch
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([
-                PathJoinSubstitution([
-                    FindPackageShare('franka_moveit_config'),
-                    'launch',
-                    'moveit.launch.py'
-                ])
-            ]),
-            launch_arguments={
-                'robot_ip': '192.168.0.30',
-                'load_gripper': 'true',
-                'use_rviz': 'false'
-            }.items()
-        ),
+        #Node(
+        #    package='ot2_control',
+        #    executable='ot2_manager.py',
+        #    name='ot2_manager',
+        #    output='screen'
+        #),
         
         # Behavior tree server
         Node(
