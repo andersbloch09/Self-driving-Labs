@@ -59,7 +59,7 @@ function(create_franka_bt_plugin plugin_name source_file)
   )
   target_compile_definitions(${plugin_name} PRIVATE BT_PLUGIN_EXPORT)
   ament_target_dependencies(${plugin_name} 
-    rclcpp rclcpp_action behaviortree_ros2 control_msgs btcpp_ros2_interfaces pluginlib
+    rclcpp rclcpp_action behaviortree_ros2 control_msgs btcpp_ros2_interfaces btcpp_ros2_interfaces pluginlib
   )
 endfunction()
 
@@ -101,6 +101,10 @@ ament_target_dependencies(bt_server
 install(TARGETS bt_server DESTINATION lib/${PROJECT_NAME})
 
 # Install plugin libraries
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
 install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
   DESTINATION lib/${PROJECT_NAME}
 )
