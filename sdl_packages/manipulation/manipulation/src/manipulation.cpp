@@ -53,6 +53,11 @@ static const std::string PLANNING_GROUP = "panda_arm";
 static const std::string base_link = "panda_link0";
 static const std::string tcp_frame = "panda_hand_tcp";
 
+
+double deg2rad(double deg) {
+    return deg * M_PI / 180.0;
+}
+
 std::vector<double> poseToList(const geometry_msgs::msg::Pose& pose) {
   return {
     pose.position.x,
@@ -164,7 +169,9 @@ public:
     move_group_->setMaxVelocityScalingFactor(MAX_VELOCITY_SCALE);
     move_group_->setMaxAccelerationScalingFactor(MAX_ACCELERATION_SCALE);
     move_group_->setPlanningPipelineId("ompl");
-    move_group_->setPlannerId("geometric::RRTstar");
+    move_group_->setPlannerId("RRTstarkConfigDefault");
+    //move_group_->setPlanningPipelineId("pilz_industrial_motion_planner");
+    //move_group_->setPlannerId("PTP");
     move_group_->setEndEffectorLink(tcp_frame);
     
     RCLCPP_INFO(logger_, "End-effector link set to: %s", move_group_->getEndEffectorLink().c_str());
@@ -852,7 +859,7 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
 
     std::string transform = database_lib::getContainerLocationTransform(container_name);
     // Initialize coordinates
-    double x = 0.0, y = 0.0, z = 0.0;
+    double x = 0.0, y = 0.0, z = 0.0, roll = 0.0, pitch = 0.0, yaw = 0.0;
     std::string slot;
     if (!transform.empty()) {
         try {
@@ -863,6 +870,9 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
             x = json["translation"][0];
             y = json["translation"][1];
             z = json["translation"][2];
+            roll = json["rotation_RPY"][0];
+            pitch = json["rotation_RPY"][1];
+            yaw = json["rotation_RPY"][2];
         } catch (const std::exception& e) {
             RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
             return false;
@@ -875,29 +885,27 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     manip_->MoveGripper(0.04, 0.04); // open
     
     // Move above the container
-    manip_->planCartesianPath(
+    manip_->moveRelativeToFrame(
       "aruco_marker",
-      {x, y, z, 0, 0, 0});
+      {x, 0, -0.3, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
     
-      
-    // Move down to pick up
-    manip_->planCartesianPath(
+    manip_->moveRelativeToFrame(
       "aruco_marker",
-      {x, y, z + 0.01, 0, 0, 0});
+      {x, y, z, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
+
+    // Move based on the tcp frame 
+    manip_->planCartesianPath(
+      "panda_hand_tcp",
+      {0, 0, 0.07, 0, 0, 0});
     
     // Close gripper
     manip_->MoveGripper(0.031, 0.031); // close
-
-    // Move up with container
+    
     manip_->planCartesianPath(
-      "aruco_marker",
-      {x, y, z - 0.2, 0, 0, 0});
-
-    manip_->planCartesianPath(
-      "aruco_marker",
-      {0, 0, -0.1, 0, 0, 0});
-
-    manip_->planCartesianPath(
+      "panda_hand_tcp",
+      {0, 0, -0.15, 0, 0, 0});
+    
+    manip_->moveRelativeToFrame(
       "mir_storage_lookout",
       {0, 0, -0.3, 0, 0, 0});
 
@@ -937,12 +945,12 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     // Move up from slot
     manip_->planCartesianPath(
       "mir_storage_lookout",
-      {x, y, -0.2, 0, 0, 0});
+      {x, y, -0.1, 0, 0, 0});
 
     // Move back to lookout
     manip_->planCartesianPath(
       "mir_storage_lookout",
-      {0, 0, 0, 0, 0, 0});
+      {0, 0, -0.1, 0, 0, 0});
     
     // Update database with new location of container
     database_lib::updateContainerLocationByName(container_name, slot);
