@@ -60,6 +60,9 @@ public:
     
     bool moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name);
 
+    // Get slot transform by slot name
+    std::string getSlotTransform(const std::string& slot_name);
+
     // Material tracking functions for multi-trip transport
     int getAvailableSlotsCount(const std::string& storage_object_name);
     
@@ -119,6 +122,12 @@ bool moveContainerToStorageObject(const std::string& container_id, const std::st
 
 bool moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name);
 
+// Get slot transform by slot name
+std::string getSlotTransform(const std::string& slot_name);
+
+// Get slot transform by slot name
+std::string getSlotTransform(const std::string& slot_name);
+
 // Material tracking convenience functions
 int getAvailableSlotsCount(const std::string& storage_object_name);
 
@@ -132,5 +141,5 @@ std::vector<std::string> getContainersWithMaterials(
 std::vector<std::string> getMaterialsNeedingTransport(
     const std::vector<std::string>& material_names,
     const std::map<std::string, std::string>& destination_map);
-
+    
 } // namespace database_lib

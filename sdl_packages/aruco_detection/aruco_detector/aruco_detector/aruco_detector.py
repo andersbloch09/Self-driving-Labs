@@ -49,7 +49,7 @@ class ArucoDetector:
         self.marker_size = 0.05
 
         # Number of measurements to average
-        self.num_scans = 20
+        self.num_scans = 60
 
         # Calibrated camera frame name
         self.camera_frame = "camera_link_calibrated"
