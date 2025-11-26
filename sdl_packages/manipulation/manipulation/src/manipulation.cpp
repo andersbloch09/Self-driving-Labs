@@ -132,7 +132,7 @@ public:
     // =====================================================
     // Add static environment (base and camera) to the scene
     // =====================================================
-    moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+    moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
 
     static_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(node_);
     // ===============================================
@@ -146,7 +146,7 @@ public:
     tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
 
     // Define position
-    std::vector<double> translation = {0.538, -0.024, 0.108};
+    std::vector<double> translation = {0.541, -0.027, 0.108};
 
     // Publish the static frame using your new method
     publishStaticFrame(
@@ -169,7 +169,7 @@ public:
     move_group_->setMaxVelocityScalingFactor(MAX_VELOCITY_SCALE);
     move_group_->setMaxAccelerationScalingFactor(MAX_ACCELERATION_SCALE);
     move_group_->setPlanningPipelineId("ompl");
-    move_group_->setPlannerId("RRTstarkConfigDefault");
+    move_group_->setPlannerId("RRTConnectkConfigDefault");
     //move_group_->setPlanningPipelineId("pilz_industrial_motion_planner");
     //move_group_->setPlannerId("PTP");
     move_group_->setEndEffectorLink(tcp_frame);
@@ -203,7 +203,7 @@ public:
       {0.0, 0.0, 0.0}          // orientation (RPY)
     };
 
-    
+
     RCLCPP_INFO(logger_, "manipulation completed!");
   }
   
@@ -223,13 +223,96 @@ rclcpp::Client<aruco_interfaces::srv::ArucoDetect>::SharedPtr getArucoClient() c
 }
 bool recover() { return recoverFromError(); }
 
+std::vector<double> getCurrentJointValues() const {
+        return move_group_->getCurrentJointValues();
+    }
+
+///////////////////////////////////////////////////
+// Object and Environment Management Methods
+///////////////////////////////////////////////////
+bool waitForStateUpdate(
+    const std::string& object_name,
+    bool object_is_attached,
+    bool object_is_known,
+    double timeout = 4.0)
+{
+    rclcpp::Time start_time = node_->now();
+    while ((node_->now() - start_time).seconds() < timeout) {
+        // Check if object is in the attached objects
+        auto attached_objects = planning_scene_interface_.getAttachedObjects({object_name});
+        bool attached = !attached_objects.empty();
+
+        // Check if object exists in the world
+        auto known_objects = planning_scene_interface_.getObjects({object_name});
+        bool known = !known_objects.empty();
+
+        if (attached == object_is_attached && known == object_is_known) {
+            return true;  // Condition satisfied
+        }
+
+        rclcpp::sleep_for(std::chrono::milliseconds(100));
+    }
+    return false;  // Timeout
+}
+
+bool attachBox(
+        const std::string& box_name,
+        const std::string& eef_link = "panda_hand_tcp",
+        double timeout = 4.0)
+    {
+        // Get links from the gripper group
+        const moveit::core::JointModelGroup* jmg =
+            move_group_->getCurrentState()->getJointModelGroup("hand");
+
+        if (!jmg) {
+            RCLCPP_ERROR(logger_, "Gripper group not found!");
+            return false;
+        }
+
+        std::vector<std::string> touch_links = jmg->getLinkModelNames();
+
+        // Prepare attached collision object
+        moveit_msgs::msg::AttachedCollisionObject aco;
+        aco.link_name = eef_link;
+        aco.object.id = box_name;
+        aco.touch_links = touch_links;
+
+        // Attach to the robot
+        planning_scene_interface_.applyAttachedCollisionObject(aco);
+
+        // Wait until the planning scene is updated
+        return waitForStateUpdate(box_name, true, false, timeout);
+    }
+
+    bool detachBox(
+    const std::string& box_name,
+    const std::string& eef_link = "panda_hand_tcp",
+    double timeout = 4.0)
+{
+    moveit_msgs::msg::AttachedCollisionObject aco;
+    aco.object.id = box_name;
+    aco.link_name = eef_link;
+    aco.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+
+    planning_scene_interface_.applyAttachedCollisionObject(aco);
+
+    return waitForStateUpdate(box_name, false, true, timeout);
+}
+
+    bool removeBox(
+        const std::string& box_name,
+        double timeout = 4.0)
+    {
+        planning_scene_interface_.removeCollisionObjects({box_name});
+        return waitForStateUpdate(box_name, false, false, timeout);
+    }
+
 void addCollisionMesh(
-    const std::string& object_id,
-    const std::string& mesh_path,
-    const geometry_msgs::msg::Pose& pose,
+  const std::string& mesh_path,
+  const geometry_msgs::msg::Pose& pose,
+  const std::string& object_id = "0",
     const std::string& frame_id = "panda_link0")
 {
-  moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
   moveit_msgs::msg::CollisionObject object;
   object.id = object_id;
   object.header.frame_id = frame_id;
@@ -249,7 +332,7 @@ void addCollisionMesh(
   object.mesh_poses.push_back(pose);
   object.operation = moveit_msgs::msg::CollisionObject::ADD;
 
-  planning_scene_interface.applyCollisionObjects({object});
+  planning_scene_interface_.applyCollisionObjects({object});
 
   RCLCPP_INFO(logger_, "Added object [%s] to planning scene", object_id.c_str());
 }
@@ -275,10 +358,10 @@ void spawnObjectById(int id)
 
     // Add to planning scene
     addCollisionMesh(
-        "object_" + std::to_string(id),   // unique name
-        obj.mesh,                         // STL path
-        pose,                             // pose of object
-        "aruco_marker"                     // frame (default)
+      obj.mesh,                         // STL path
+      pose,                             // pose of object
+      "object_" + std::to_string(id),   // unique name
+      "aruco_marker"                     // frame (default)
     );
 
     RCLCPP_INFO(
@@ -571,6 +654,7 @@ private:
   rclcpp::Logger logger_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  moveit::planning_interface::PlanningSceneInterface planning_scene_interface_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> gripper_group_;
   rclcpp::Client<franka_msgs::srv::ErrorRecovery>::SharedPtr error_recovery_client_;
@@ -602,6 +686,9 @@ public:
   using PlaceContainer = btcpp_ros2_interfaces::action::Place;
   using GoalHandlePlaceContainer = rclcpp_action::ServerGoalHandle<PlaceContainer>;
 
+  using PlaceContainerOT = btcpp_ros2_interfaces::action::Place;
+  using GoalHandlePlaceContainerOT = rclcpp_action::ServerGoalHandle<PlaceContainerOT>;
+
   explicit ActionsManager(std::shared_ptr<Manipulator> manip)
   : manip_(manip),
     node_(manip->getNode()),
@@ -624,6 +711,14 @@ public:
       std::bind(&ActionsManager::handle_goal_place_container, this, _1, _2),
       std::bind(&ActionsManager::handle_cancel_place_container, this, _1),
       std::bind(&ActionsManager::handle_accepted_place_container, this, _1)
+    );
+
+     place_container_OT_server_ = rclcpp_action::create_server<PlaceContainer>(
+      node_,
+      "place_container_OT",
+      std::bind(&ActionsManager::handle_goal_place_container_OT, this, _1, _2),
+      std::bind(&ActionsManager::handle_cancel_place_container_OT, this, _1),
+      std::bind(&ActionsManager::handle_accepted_place_container_OT, this, _1)
     );
 
     pick_up_container_server_ = rclcpp_action::create_server<PickUp>(
@@ -888,7 +983,9 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     manip_->moveRelativeToFrame(
       "aruco_marker",
       {x, 0, -0.3, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
-    
+
+    auto joints = manip_->getCurrentJointValues();
+
     manip_->moveRelativeToFrame(
       "aruco_marker",
       {x, y, z, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
@@ -896,18 +993,39 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     // Move based on the tcp frame 
     manip_->planCartesianPath(
       "panda_hand_tcp",
-      {0, 0, 0.07, 0, 0, 0});
+      {0, 0, 0.07, 0, 0, 0},
+      false);
     
     // Close gripper
     manip_->MoveGripper(0.031, 0.031); // close
+  
+    geometry_msgs::msg::Pose pose;
+    pose.position.z = 0.04;
     
+    // add object 
+    manip_->addCollisionMesh(
+      "package://manipulation/env_meshes/glass_holder.stl",
+      pose,
+      "container_box",
+      "panda_hand_tcp"
+      );
+
+    manip_->attachBox(
+      "container_box",
+      "panda_hand_tcp"
+    );
+
     manip_->planCartesianPath(
       "panda_hand_tcp",
-      {0, 0, -0.15, 0, 0, 0});
+      {0, 0, -0.15, 0, 0, 0},
+      false);
     
+    manip_->moveToJointPosition(joints);
+
     manip_->moveRelativeToFrame(
       "mir_storage_lookout",
-      {0, 0, -0.3, 0, 0, 0});
+      {0, 0, -0.2, 0, 0, 0});
+    
 
     // get free slot on mir
     transform = database_lib::getFreeSlot("storage_mir");
@@ -952,6 +1070,12 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
       "mir_storage_lookout",
       {0, 0, -0.1, 0, 0, 0});
     
+    manip_->detachBox(
+      "container_box",
+      "panda_hand_tcp"
+    );
+    manip_->removeBox("container_box");
+
     // Update database with new location of container
     database_lib::updateContainerLocationByName(container_name, slot);
 
@@ -1115,6 +1239,183 @@ bool place_container(const std::string& container_name) {
 
 
   // =====================================================
+  // place_container_OT ACTION
+  // =====================================================
+  rclcpp_action::GoalResponse handle_goal_place_container_OT(
+  const rclcpp_action::GoalUUID &,
+  std::shared_ptr<const PlaceContainerOT::Goal> goal)
+{
+  RCLCPP_INFO(logger_, "Received goal for /place_container_OT with container_name: %s", goal->container_name.c_str());
+  
+  // Optional: validate parameter 
+
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse handle_cancel_place_container_OT(
+  const std::shared_ptr<GoalHandlePlaceContainerOT>)
+{
+  RCLCPP_INFO(logger_, "Cancel request received for /place_container_OT");
+  return rclcpp_action::CancelResponse::ACCEPT;
+} 
+
+void handle_accepted_place_container_OT(const std::shared_ptr<GoalHandlePlaceContainerOT> goal_handle)
+{
+  std::thread([this, goal_handle]() {
+    // Extract the 'container_name' parameter from the goal
+    const auto goal = goal_handle->get_goal();
+    std::string container_name = goal->container_name;
+    std::string slot_name = goal->slot_name;
+    
+    auto result = std::make_shared<PlaceContainerOT::Result>();
+    bool success = place_container_OT(container_name, slot_name);  // Pass container_name and slot_name to the function
+
+    result->message = success 
+      ? "Place container completed successfully for " + container_name
+      : "Place container failed for " + container_name ;
+    if (success)
+      goal_handle->succeed(result);
+    else
+      goal_handle->abort(result);
+  }).detach();
+}
+
+void handle_canceled_place_container_OT(const std::shared_ptr<GoalHandlePlaceContainerOT>)
+{
+  RCLCPP_INFO(logger_, "Place container canceled");
+}
+
+bool place_container_OT(const std::string& container_name, const std::string& slot_name) {
+  // Run only after calibrating the camera and detecting reference aruco marker
+  RCLCPP_INFO(logger_, "Placing container: %s", container_name.c_str());
+  // Open gripper
+  manip_->MoveGripper(0.04, 0.04); // open
+
+  // Move to lookout
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {0, 0, -0.3, 0, 0, 0});
+
+  // get container location from database
+  std::string transform = database_lib::getContainerLocationTransform(container_name);
+  // Initialize coordinates
+  double x1 = 0.0, y1 = 0.0;
+  if (!transform.empty()) {
+    try {
+      // Parse JSON
+      auto json = nlohmann::json::parse(transform);
+      
+      // Extract values
+      x1 = json["translation"][0];
+      y1 = json["translation"][1];
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+      return false;
+    }
+  }
+  
+  RCLCPP_INFO(logger_, "Container coordinates: x=%.3f, y=%.3f", x1, y1);
+  
+
+  // Move above the container slot
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {x1, y1, 0, 0, 0, 0});
+    
+    
+    // Move down to grasp
+    manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {x1, y1, 0.04, 0, 0, 0});
+  
+  // close gripper
+  manip_->MoveGripper(0.031, 0.031); 
+  
+  geometry_msgs::msg::Pose pose;
+  pose.position.z = 0.04;
+  
+  // add object 
+  manip_->addCollisionMesh(
+    "package://manipulation/env_meshes/glass_holder.stl",
+    pose,
+    "container_box",
+    "panda_hand_tcp"
+    );
+
+  manip_->attachBox(
+    "container_box",
+    "panda_hand_tcp"
+  );
+
+  // Move up from slot
+  manip_->planCartesianPath(
+    "mir_storage_lookout",
+    {x1, y1, -0.2, 0, 0, 0});
+    
+  // get free slot on mir
+  transform = database_lib::getSlotTransform(slot_name);
+  // Initialize coordinates
+  double x = 0.0, y = 0.0, z = 0.0, roll = 0.0, pitch = 0.0, yaw = 0.0;
+  std::string slot;
+  if (!transform.empty()) {
+      try {
+          // Parse JSON
+          auto json = nlohmann::json::parse(transform);
+          
+          // Extract values
+          x = json["translation"][0];
+          y = json["translation"][1];
+          z = json["translation"][2];
+          roll = json["rotation_RPY"][0];
+          pitch = json["rotation_RPY"][1];
+          yaw = json["rotation_RPY"][2];
+      } catch (const std::exception& e) {
+          RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+          return false;
+      }
+  }
+  
+  RCLCPP_INFO(logger_, "Container coordinates: x=%.3f, y=%.3f, z=%.3f", x, y, z);
+
+  // Move above the container
+  manip_->moveRelativeToFrame(
+    "aruco_marker",
+    {x, 0, -0.3, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
+
+  auto joints = manip_->getCurrentJointValues();
+
+  manip_->moveRelativeToFrame(
+    "aruco_marker",
+    {x, y, z, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
+
+  // Move based on the tcp frame 
+  manip_->planCartesianPath(
+    "panda_hand_tcp",
+    {0, 0, 0.05, 0, 0, 0},
+    false);
+
+  manip_->MoveGripper(0.04, 0.04); // open
+  
+  manip_->detachBox(
+      "container_box",
+      "panda_hand_tcp"
+    );
+  manip_->removeBox("container_box");
+
+  manip_->planCartesianPath(
+    "panda_hand_tcp",
+    {0, 0, -0.15, 0, 0, 0},
+    false);
+  
+  manip_->moveToJointPosition(joints);
+
+  // Update database with new location of container
+  database_lib::updateContainerLocationByName(container_name, slot);
+
+  return true;
+}
+
+  // =====================================================
   // camera_calibration ACTION
   // =====================================================
 
@@ -1265,6 +1566,7 @@ bool place_container(const std::string& container_name) {
   rclcpp_action::Server<GoHome>::SharedPtr go_home_server_;
   rclcpp_action::Server<PickUp>::SharedPtr pick_up_container_server_;
   rclcpp_action::Server<PlaceContainer>::SharedPtr place_container_server_;
+  rclcpp_action::Server<PlaceContainerOT>::SharedPtr place_container_OT_server_;
   rclcpp_action::Server<CubeVisualCalibration>::SharedPtr cube_visual_calibration_server_;
   rclcpp_action::Server<CameraCalibration>::SharedPtr camera_calibration_server_;
   rclcpp_action::Server<MoveBoxPosOnRobot>::SharedPtr move_box_pos_on_robot_server_;
