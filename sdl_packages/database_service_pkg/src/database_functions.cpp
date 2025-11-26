@@ -840,6 +840,47 @@ bool DatabaseHelpers::moveContainerToStorageObjectByName(const std::string& cont
     }
 }
 
+std::string DatabaseHelpers::getSlotTransform(const std::string& slot_name)
+{
+    try {
+        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
+        if (!connection) {
+            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
+            return "";
+        }
+        pqxx::work transaction(*connection);
+        
+        // Query to get the transform for a specific slot
+        std::string query = R"(
+            SELECT s.transform_to_object
+            FROM slots s
+            WHERE s.name = )" + transaction.quote(slot_name) + ";";
+        
+        pqxx::result result = transaction.exec(query);
+        
+        if (result.empty()) {
+            RCLCPP_WARN(rclcpp::get_logger("database_helpers"), 
+                       "Slot '%s' not found in database", slot_name.c_str());
+            return "";
+        }
+        
+        // Return the transform
+        std::string slot_transform = result[0][0].as<std::string>();
+        
+        transaction.commit();
+        
+        RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                   "Retrieved transform for slot '%s'", slot_name.c_str());
+        
+        return slot_transform;
+        
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                    "Error getting slot transform for '%s': %s", slot_name.c_str(), e.what());
+        return "";
+    }
+}
+
 // Singleton instance getter
 DatabaseHelpers& DatabaseHelpers::getInstance()
 {
@@ -917,6 +958,11 @@ bool moveContainerToStorageObject(const std::string& container_id, const std::st
 bool moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name)
 {
     return DatabaseHelpers::getInstance().moveContainerToStorageObjectByName(container_name, storage_object_name);
+}
+
+std::string getSlotTransform(const std::string& slot_name)
+{
+    return DatabaseHelpers::getInstance().getSlotTransform(slot_name);
 }
 
 } // namespace database_lib

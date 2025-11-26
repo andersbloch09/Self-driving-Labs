@@ -59,6 +59,9 @@ public:
     
     bool moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name);
 
+    // Get slot transform by slot name
+    std::string getSlotTransform(const std::string& slot_name);
+
 private:
     std::string db_name_;
     std::string db_user_;
@@ -103,5 +106,8 @@ std::string getContainerStorageObjectByContainerName(const std::string& containe
 bool moveContainerToStorageObject(const std::string& container_id, const std::string& storage_object_name);
 
 bool moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name);
+
+// Get slot transform by slot name
+std::string getSlotTransform(const std::string& slot_name);
 
 } // namespace database_lib
