@@ -1,11 +1,23 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
 
 def generate_launch_description():
+
+    # --------------------------------
+    # Declare parent launch arguments
+    # --------------------------------
+    use_rviz_arg = DeclareLaunchArgument(
+        'use_rviz',
+        default_value='false',
+        description='Launch RViz from MoveIt'
+    )
+
+    use_rviz = LaunchConfiguration('use_rviz')
 
     # -----------------------------
     # 1. FRANKA MOVEIT LAUNCH
@@ -13,17 +25,17 @@ def generate_launch_description():
     franka_moveit_pkg = get_package_share_directory('franka_moveit_config')
 
     franka_moveit_launch = IncludeLaunchDescription(
-    PythonLaunchDescriptionSource(
-        os.path.join(
-            get_package_share_directory('franka_moveit_config'),
-            'launch',
-            'moveit.launch.py'
-        )
-    ),
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                franka_moveit_pkg,
+                'launch',
+                'moveit.launch.py'
+            )
+        ),
         launch_arguments={
             'robot_ip': '192.168.0.30',
             'load_gripper': 'true',
-            'use_rviz': 'false',
+            'use_rviz': use_rviz,     # <-- FIXED
         }.items()
     )
 
@@ -59,6 +71,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        use_rviz_arg,          # <-- MUST BE INCLUDED
         franka_moveit_launch,
         realsense_launch,
         aruco_node

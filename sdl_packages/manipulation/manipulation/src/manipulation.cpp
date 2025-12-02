@@ -199,7 +199,7 @@ public:
 
     object_map[2] = {
       "package://manipulation/env_meshes/OT2_ref.stl",
-      {0.0, 0.0, 0.0},        // position
+      {0.02, 0.0, 0.0},        // position
       {0.0, 0.0, 0.0}          // orientation (RPY)
     };
 
@@ -226,6 +226,34 @@ bool recover() { return recoverFromError(); }
 std::vector<double> getCurrentJointValues() const {
         return move_group_->getCurrentJointValues();
     }
+
+// setter method
+bool setPlanningPipelineId(const std::string& pipeline_id)
+{
+  try {
+    move_group_->setPlanningPipelineId(pipeline_id);
+  }
+  catch (const std::exception& e) {
+    RCLCPP_ERROR(logger_, "Failed to set planning pipeline '%s': %s",
+                 pipeline_id.c_str(), e.what());
+    return false;
+  }
+  return true;
+}
+
+bool setPlannerId(const std::string& planner_id)
+{
+  try {
+    move_group_->setPlannerId(planner_id);
+  }
+  catch (const std::exception& e) {
+    RCLCPP_ERROR(logger_, "Failed to set planner id '%s': %s",
+                 planner_id.c_str(), e.what());
+    return false;
+  }
+  return true;
+}
+
 
 ///////////////////////////////////////////////////
 // Object and Environment Management Methods
@@ -855,8 +883,10 @@ void handle_canceled_cube_visual_calibration(const std::shared_ptr<GoalHandleCub
   RCLCPP_INFO(logger_, "Cube visual calibration canceled");
 }
 
-  bool cube_visual_calibration(const std::string& side) {
-
+bool cube_visual_calibration(const std::string& side) {
+  
+    manip_->setPlanningPipelineId("ompl");
+    manip_->setPlannerId("RRTConnectkConfigDefault");
     if (side == "right") {
       RCLCPP_INFO(logger_, "Executing cube visual calibration...");
       manip_->moveToJointPosition(std::vector<double>{
@@ -925,10 +955,10 @@ void handle_accepted_pick_up_container(const std::shared_ptr<GoalHandlePickUp> g
     // Extract the 'container_name' parameter from the goal
     const auto goal = goal_handle->get_goal();
     std::string container_name = goal->container_name;
-
+    bool is_ot = goal->is_ot;
     
     auto result = std::make_shared<PickUp::Result>();
-    bool success = pick_up_container(container_name);  // Pass container_name to the function
+    bool success = pick_up_container(container_name, is_ot);  // Pass container_name and is_OT to the function
 
     result->message = success 
       ? "Pick up container completed successfully for " + container_name
@@ -946,7 +976,7 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
   RCLCPP_INFO(logger_, "Pick up container canceled");
 }
 
-  bool pick_up_container(const std::string& container_name) {
+  bool pick_up_container(const std::string& container_name, bool is_ot) {
     // Run only after calibrating the camera and detecting reference aruco marker
     std::string slot_transform = database_lib::getContainerLocationTransform(container_name);
 
@@ -976,6 +1006,10 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     
     RCLCPP_INFO(logger_, "Container coordinates: x=%.3f, y=%.3f, z=%.3f", x, y, z);
     
+    
+    manip_->setPlanningPipelineId("pilz_industrial_motion_planner");
+    manip_->setPlannerId("PTP");
+    
     // Open gripper
     manip_->MoveGripper(0.04, 0.04); // open
     
@@ -985,6 +1019,15 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
       {x, 0, -0.3, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
 
     auto joints = manip_->getCurrentJointValues();
+    
+    if (is_ot){
+      manip_->planCartesianPath(
+        "aruco_marker",
+        {x + 0.05, y, z - 0.2, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
+    } 
+
+    manip_->setPlanningPipelineId("ompl");
+    manip_->setPlannerId("RRTConnectkConfigDefault");
 
     manip_->moveRelativeToFrame(
       "aruco_marker",
@@ -993,34 +1036,37 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     // Move based on the tcp frame 
     manip_->planCartesianPath(
       "panda_hand_tcp",
-      {0, 0, 0.07, 0, 0, 0},
+      {0, 0, 0.1, 0, 0, 0},
       false);
-    
+      
+      geometry_msgs::msg::Pose pose;
+      pose.position.z = 0.04;
+      
+      // add object 
+      manip_->addCollisionMesh(
+        "package://manipulation/env_meshes/glass_holder.stl",
+        pose,
+        container_name,
+        "panda_hand_tcp"
+        );
+  
+      manip_->attachBox(
+        container_name,
+        "panda_hand_tcp"
+      );
     // Close gripper
     manip_->MoveGripper(0.031, 0.031); // close
   
-    geometry_msgs::msg::Pose pose;
-    pose.position.z = 0.04;
-    
-    // add object 
-    manip_->addCollisionMesh(
-      "package://manipulation/env_meshes/glass_holder.stl",
-      pose,
-      "container_box",
-      "panda_hand_tcp"
-      );
-
-    manip_->attachBox(
-      "container_box",
-      "panda_hand_tcp"
-    );
 
     manip_->planCartesianPath(
       "panda_hand_tcp",
-      {0, 0, -0.15, 0, 0, 0},
+      {0, 0, -0.13, 0, 0, 0},
       false);
     
     manip_->moveToJointPosition(joints);
+
+    manip_->setPlanningPipelineId("pilz_industrial_motion_planner");
+    manip_->setPlannerId("PTP");
 
     manip_->moveRelativeToFrame(
       "mir_storage_lookout",
@@ -1047,7 +1093,7 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
 
     manip_->planCartesianPath(
       "mir_storage_lookout",
-      {0, 0, -0.15, 0, 0, 0});
+      {0, 0, -0.1, 0, 0, 0});
 
     // Move above the free slot
     manip_->planCartesianPath(
@@ -1056,7 +1102,7 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
 
     manip_->planCartesianPath(
       "mir_storage_lookout",
-      {x, y, 0.04, 0, 0, 0});
+      {x, y, 0.045, 0, 0, 0});
     
     manip_->MoveGripper(0.04, 0.04); // open
 
@@ -1071,10 +1117,9 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
       {0, 0, -0.1, 0, 0, 0});
     
     manip_->detachBox(
-      "container_box",
+      container_name,
       "panda_hand_tcp"
     );
-    manip_->removeBox("container_box");
 
     // Update database with new location of container
     database_lib::updateContainerLocationByName(container_name, slot);
@@ -1132,6 +1177,10 @@ bool place_container(const std::string& container_name) {
   // Run only after calibrating the camera and detecting reference aruco marker
   RCLCPP_INFO(logger_, "Placing container: %s", container_name.c_str());
   // Open gripper
+
+  manip_->setPlanningPipelineId("pilz_industrial_motion_planner");
+  manip_->setPlannerId("PTP");
+
   manip_->MoveGripper(0.04, 0.04); // open
 
   // Move to lookout
@@ -1168,7 +1217,7 @@ bool place_container(const std::string& container_name) {
     // Move down to grasp
     manip_->planCartesianPath(
     "mir_storage_lookout",
-    {x, y, 0.04, 0, 0, 0});
+    {x, y, 0.045, 0, 0, 0});
   
   // Open gripper to release
   manip_->MoveGripper(0.031, 0.031); // open
@@ -1291,6 +1340,9 @@ bool place_container_OT(const std::string& container_name, const std::string& sl
   // Open gripper
   manip_->MoveGripper(0.04, 0.04); // open
 
+  manip_->setPlanningPipelineId("pilz_industrial_motion_planner");
+  manip_->setPlannerId("PTP");
+  
   // Move to lookout
   manip_->planCartesianPath(
     "mir_storage_lookout",
@@ -1326,7 +1378,7 @@ bool place_container_OT(const std::string& container_name, const std::string& sl
     // Move down to grasp
     manip_->planCartesianPath(
     "mir_storage_lookout",
-    {x1, y1, 0.04, 0, 0, 0});
+    {x1, y1, 0.045, 0, 0, 0});
   
   // close gripper
   manip_->MoveGripper(0.031, 0.031); 
@@ -1338,12 +1390,12 @@ bool place_container_OT(const std::string& container_name, const std::string& sl
   manip_->addCollisionMesh(
     "package://manipulation/env_meshes/glass_holder.stl",
     pose,
-    "container_box",
+    container_name,
     "panda_hand_tcp"
     );
 
   manip_->attachBox(
-    "container_box",
+    container_name,
     "panda_hand_tcp"
   );
 
@@ -1356,7 +1408,6 @@ bool place_container_OT(const std::string& container_name, const std::string& sl
   transform = database_lib::getSlotTransform(slot_name);
   // Initialize coordinates
   double x = 0.0, y = 0.0, z = 0.0, roll = 0.0, pitch = 0.0, yaw = 0.0;
-  std::string slot;
   if (!transform.empty()) {
       try {
           // Parse JSON
@@ -1381,36 +1432,45 @@ bool place_container_OT(const std::string& container_name, const std::string& sl
   manip_->moveRelativeToFrame(
     "aruco_marker",
     {x, 0, -0.3, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
-
+  
   auto joints = manip_->getCurrentJointValues();
 
   manip_->moveRelativeToFrame(
     "aruco_marker",
+    {x + 0.05, y, z - 0.2, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
+
+    
+  manip_->setPlanningPipelineId("ompl");
+  manip_->setPlannerId("RRTConnectkConfigDefault");
+
+  
+  manip_->moveRelativeToFrame(
+    "aruco_marker",
     {x, y, z, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
+    
 
   // Move based on the tcp frame 
   manip_->planCartesianPath(
     "panda_hand_tcp",
-    {0, 0, 0.05, 0, 0, 0},
+    {0, 0, 0.09, 0, 0, 0},
     false);
 
   manip_->MoveGripper(0.04, 0.04); // open
   
   manip_->detachBox(
-      "container_box",
+      container_name,
       "panda_hand_tcp"
     );
-  manip_->removeBox("container_box");
 
   manip_->planCartesianPath(
     "panda_hand_tcp",
-    {0, 0, -0.15, 0, 0, 0},
+    {0, 0, -0.13, 0, 0, 0},
     false);
-  
+
   manip_->moveToJointPosition(joints);
 
   // Update database with new location of container
-  database_lib::updateContainerLocationByName(container_name, slot);
+  database_lib::updateContainerLocationByName(container_name, slot_name);
 
   return true;
 }

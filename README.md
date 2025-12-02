@@ -77,6 +77,14 @@ When you need to load the contents of the seed file into a different instance of
 ```bash
 docker exec -i supabase-db psql -U supabase_admin -d postgres < supabase/seed.sql
 ```
+
+To drop the database first run: 
+```bash
+docker exec -i supabase-db psql -U supabase_admin -d postgres \
+-c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO supabase_admin; GRANT ALL ON SCHEMA public to public;" \
+&& docker exec -i supabase-db psql -U supabase_admin -d postgres < supabase/seed.sql
+```
+
 # Test database interaction functions
 Start by ensuring that POOLER_TENANT_ID is set to "mytenant" in your .env file, and that the supabase docker has been started. This can be done by running start.sh in the supabase directory or you can check whether it is already running by executing:
 ```bash
@@ -115,7 +123,7 @@ source install/setup.bash && ros2 action send_goal /bt_execution btcpp_ros2_inte
 ```
 The folder bt_server_pkg/behavior_trees is loaded in its entirety, and each behavior tree can be referenced as the target tree in the command above. The alias used for each tree should be found in the individual files. For instance: <BehaviorTree ID="BT_Test">
 
-# Running the Franca
+# Running the Franka
 In order to run the franca, first ensure that the the desired host machine is connected to the manipulator through the ethernet cable. The host machine will have to be running the Real Time Kernel, a guide for which can be found at: https://frankarobotics.github.io/docs/libfranka/docs/installation_linux.html#setting-up-the-real-time-kernel
 
 Ensure that the host machine has booted using the correct kernel, either by default or by choosing it in the GNU bootloader.

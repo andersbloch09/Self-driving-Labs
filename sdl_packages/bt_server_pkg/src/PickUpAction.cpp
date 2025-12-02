@@ -11,6 +11,7 @@ bool PickUpAction::setGoal(Goal& goal)
     }
     
     goal.container_name = container_name.value();
+    goal.is_ot = getInput<bool>("is_ot").value_or(false);
     logInfo(logger(), "Setting goal to pick up container: " + goal.container_name);
     return true;
 }

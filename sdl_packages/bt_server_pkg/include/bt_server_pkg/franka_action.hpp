@@ -88,7 +88,8 @@ public:
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("container_name", "Container name for pick operation")
+            InputPort<std::string>("container_name", "Container name for pick operation"),
+            InputPort<bool>("is_ot", "Is the container going to be placed in the OT")
         });
     }
 
@@ -113,7 +114,8 @@ public:
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("container_name", "Container name for place operation")
+            InputPort<std::string>("container_name", "Container name for place operation"),
+            InputPort<std::string>("slot_name", "Slot name where the container should be placed")
         });
     }
 
