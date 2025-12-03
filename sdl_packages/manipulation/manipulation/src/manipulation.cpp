@@ -32,6 +32,7 @@
 #include <btcpp_ros2_interfaces/action/cube_visual_calibration.hpp>
 #include <btcpp_ros2_interfaces/action/pick_up.hpp>
 #include <btcpp_ros2_interfaces/action/place.hpp>
+#include <btcpp_ros2_interfaces/action/go_home.hpp>
 
 //import of the database module
 #include "database_service/database_functions.hpp"
@@ -45,8 +46,10 @@
 
 
 static const double PLANNING_TIME_S = 25.0;
-static const double MAX_VELOCITY_SCALE = 0.3;  // Even slower - 1% of max velocity
-static const double MAX_ACCELERATION_SCALE = 0.1;  // Even slower - 1% of max acceleration
+//static const double MAX_VELOCITY_SCALE = 0.3;  // Even slower - 1% of max velocity
+//static const double MAX_ACCELERATION_SCALE = 0.1;  // Even slower - 1% of max acceleration
+static const double MAX_VELOCITY_SCALE = 0.5;  // Even slower - 1% of max velocity
+static const double MAX_ACCELERATION_SCALE = 0.15;  // Even slower - 1% of max acceleration
 static const unsigned int PLANNING_ATTEMPTS = 10;
 static const double GOAL_TOLERANCE = 1e-3;
 static const std::string PLANNING_GROUP = "panda_arm";
@@ -334,6 +337,30 @@ bool attachBox(
         planning_scene_interface_.removeCollisionObjects({box_name});
         return waitForStateUpdate(box_name, false, false, timeout);
     }
+
+void clearAllPlanningSceneObjects(double timeout = 4.0)
+{
+    // 1. Get the names of ALL known collision objects in the virtual world.
+    // This includes objects attached to the robot.
+    std::vector<std::string> object_ids = planning_scene_interface_.getKnownObjectNames();
+
+    if (!object_ids.empty()) {
+        // 2. Remove all collision objects simultaneously. 
+        // MoveIt handles the detachment of attached objects if they are removed from the world.
+        planning_scene_interface_.removeCollisionObjects(object_ids);
+        
+        RCLCPP_INFO_STREAM(logger_, "Successfully cleared " << object_ids.size() 
+                           << " total objects (collision and attached) from the planning scene.");
+        
+        // 3. Wait for the state update to ensure MoveIt and RViz have processed the removal.
+        // We use a small sleep here, as the PlanningSceneInterface API often waits internally 
+        // but explicit waiting is sometimes necessary in ROS 2 environments.
+        rclcpp::sleep_for(std::chrono::milliseconds(static_cast<int>(timeout * 1000)));
+
+    } else {
+        RCLCPP_INFO(logger_, "Planning scene is already empty of known collision objects.");
+    }
+}
 
 void addCollisionMesh(
   const std::string& mesh_path,
@@ -696,7 +723,7 @@ private:
 class ActionsManager
 {
 public:
-  using GoHome = control_msgs::action::FollowJointTrajectory;
+  using GoHome = btcpp_ros2_interfaces::action::GoHome;
   using GoalHandleGoHome = rclcpp_action::ServerGoalHandle<GoHome>;
 
   using MoveBoxPosOnRobot = control_msgs::action::FollowJointTrajectory;
@@ -791,9 +818,8 @@ private:
   // =====================================================
   rclcpp_action::GoalResponse handle_goal_go_home(
     const rclcpp_action::GoalUUID &,
-    std::shared_ptr<const GoHome::Goal>)
+    std::shared_ptr<const GoHome::Goal> goal)
   {
-    RCLCPP_INFO(logger_, "Received goal for /go_home");
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -805,24 +831,44 @@ private:
   }
 
   void handle_accepted_go_home(const std::shared_ptr<GoalHandleGoHome> goal_handle)
-  {
+{
+    // Execute the action logic in a single background thread.
+    // This allows the ROS action server to continue processing other requests.
     std::thread([this, goal_handle]() {
-      auto result = std::make_shared<GoHome::Result>();
-      bool success = go_home();
-      result->error_code = success ? 0 : -1;
-      result->error_string = success ? "Trajectory executed successfully" : "Trajectory failed";
+        // 1. Get the goal data safely within the thread's scope.
+        const auto goal = goal_handle->get_goal();
+        bool clear_planning_scene_param = goal->clear_planning_scene;
 
-      if (success)
-        goal_handle->succeed(result);
-      else
-        goal_handle->abort(result);
-    }).detach();
-  }
+        auto result = std::make_shared<GoHome::Result>();
 
-  bool go_home()
+        // Check if the goal was canceled before starting execution
+        if (goal_handle->is_canceling()) {
+            goal_handle->canceled(result);
+            RCLCPP_INFO(logger_, "GoHome action canceled by user.");
+            return;
+        }
+
+        // 2. Execute the primary function.
+        bool success = go_home(clear_planning_scene_param);
+
+     
+        if (success) {
+            goal_handle->succeed(result);
+            RCLCPP_INFO(logger_, "GoHome action succeeded.");
+        } else {
+            goal_handle->abort(result);
+            RCLCPP_ERROR(logger_, "GoHome action aborted.");
+        }
+    }).detach(); // Use detach or join here, but detach is common for quick action tasks.
+}
+
+  bool go_home(bool clear_planning_scene)
   {
 
-    manip_->recover();  
+    manip_->recover();
+    if(clear_planning_scene){
+        manip_->clearAllPlanningSceneObjects();
+    }
 
     manip_->moveToJointPosition(std::vector<double>{
       0.20375095067107887, -0.39273988735964127, -0.17276381184038808,
@@ -1032,28 +1078,27 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     manip_->moveRelativeToFrame(
       "aruco_marker",
       {x, y, z, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
-
-    // Move based on the tcp frame 
+    
     manip_->planCartesianPath(
       "panda_hand_tcp",
       {0, 0, 0.1, 0, 0, 0},
       false);
-      
-      geometry_msgs::msg::Pose pose;
-      pose.position.z = 0.04;
-      
-      // add object 
-      manip_->addCollisionMesh(
-        "package://manipulation/env_meshes/glass_holder.stl",
-        pose,
-        container_name,
-        "panda_hand_tcp"
-        );
-  
-      manip_->attachBox(
-        container_name,
-        "panda_hand_tcp"
+     
+    geometry_msgs::msg::Pose pose;
+    pose.position.z = 0.04;
+    
+    // add object 
+    manip_->addCollisionMesh(
+      "package://manipulation/env_meshes/glass_holder.stl",
+      pose,
+      container_name,
+      "panda_hand_tcp"
       );
+
+    manip_->attachBox(
+      container_name,
+      "panda_hand_tcp"
+    );
     // Close gripper
     manip_->MoveGripper(0.031, 0.031); // close
   
@@ -1098,28 +1143,29 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     // Move above the free slot
     manip_->planCartesianPath(
       "mir_storage_lookout",
-      {x, y, 0, 0, 0, 0});
+      {x, y, 0, 0, 0, 0}, false);
 
     manip_->planCartesianPath(
       "mir_storage_lookout",
-      {x, y, 0.045, 0, 0, 0});
+      {x, y, 0.045, 0, 0, 0}, false);
     
     manip_->MoveGripper(0.04, 0.04); // open
+
+    manip_->detachBox(
+      container_name,
+      "panda_hand_tcp"
+    );
 
     // Move up from slot
     manip_->planCartesianPath(
       "mir_storage_lookout",
-      {x, y, -0.1, 0, 0, 0});
+      {x, y, -0.1, 0, 0, 0}, false);
 
     // Move back to lookout
     manip_->planCartesianPath(
       "mir_storage_lookout",
       {0, 0, -0.1, 0, 0, 0});
     
-    manip_->detachBox(
-      container_name,
-      "panda_hand_tcp"
-    );
 
     // Update database with new location of container
     database_lib::updateContainerLocationByName(container_name, slot);
@@ -1212,12 +1258,25 @@ bool place_container(const std::string& container_name) {
   manip_->planCartesianPath(
     "mir_storage_lookout",
     {x, y, 0, 0, 0, 0});
-    
-    
+  geometry_msgs::msg::Pose pose;
+  pose.position.z = 0.04;
+    // add object 
+  manip_->addCollisionMesh(
+    "package://manipulation/env_meshes/glass_holder.stl",
+    pose,
+    container_name,
+    "panda_hand_tcp"
+    );
+
+  manip_->attachBox(
+    container_name,
+    "panda_hand_tcp"
+  );
+
     // Move down to grasp
     manip_->planCartesianPath(
     "mir_storage_lookout",
-    {x, y, 0.045, 0, 0, 0});
+    {x, y, 0.045, 0, 0, 0}, false);
   
   // Open gripper to release
   manip_->MoveGripper(0.031, 0.031); // open
@@ -1225,7 +1284,7 @@ bool place_container(const std::string& container_name) {
   // Move up from slot
   manip_->planCartesianPath(
     "mir_storage_lookout",
-    {x, y, -0.2, 0, 0, 0});
+    {x, y, -0.2, 0, 0, 0}, false);
     
     
     // Move back to lookout
@@ -1263,14 +1322,19 @@ bool place_container(const std::string& container_name) {
 
   manip_->planCartesianPath(
     "aruco_marker",
-    {x, y, 0.01, 0, 0, 0});
+    {x, y, 0.01, 0, 0, 0}, false);
 
   manip_->MoveGripper(0.04, 0.04); // open
+  
+  manip_->detachBox(
+      container_name,
+      "panda_hand_tcp"
+    );
 
   // Move up from slot
   manip_->planCartesianPath(
     "aruco_marker",
-    {x, y, -0.2, 0, 0, 0});
+    {x, y, -0.2, 0, 0, 0}, false);
 
   manip_->planCartesianPath(
     "aruco_marker",
@@ -1372,13 +1436,13 @@ bool place_container_OT(const std::string& container_name, const std::string& sl
   // Move above the container slot
   manip_->planCartesianPath(
     "mir_storage_lookout",
-    {x1, y1, 0, 0, 0, 0});
+    {x1, y1, 0, 0, 0, 0}, false);
     
     
     // Move down to grasp
     manip_->planCartesianPath(
     "mir_storage_lookout",
-    {x1, y1, 0.045, 0, 0, 0});
+    {x1, y1, 0.045, 0, 0, 0}, false);
   
   // close gripper
   manip_->MoveGripper(0.031, 0.031); 
@@ -1402,7 +1466,7 @@ bool place_container_OT(const std::string& container_name, const std::string& sl
   // Move up from slot
   manip_->planCartesianPath(
     "mir_storage_lookout",
-    {x1, y1, -0.2, 0, 0, 0});
+    {x1, y1, -0.2, 0, 0, 0}, false);
     
   // get free slot on mir
   transform = database_lib::getSlotTransform(slot_name);

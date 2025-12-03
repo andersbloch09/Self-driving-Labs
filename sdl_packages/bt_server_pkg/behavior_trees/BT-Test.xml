@@ -5,16 +5,7 @@
             <GoToMission name="go_to_OT" 
                         action_name="go_to_mission"
                         mission_id="4898e76e-cc3a-11f0-b937-000e8e984489" /> -->
-            
-            <!-- Home the Franka manipulator -->
-            <FrankaTrajectoryAction name="go_home"
-                                   action_name="go_home" />
-            
-            <!-- Calibrate camera using left side of cube -->
-            <FrankaCalibrationAction name="cube_calibrate_left"
-                                    action_name="cube_visual_calibration"
-                                    side="left" />
-            
+
             <!-- Place Container1 -->
             <PlaceAction name="place_container1"
                         action_name="place_container_OT"

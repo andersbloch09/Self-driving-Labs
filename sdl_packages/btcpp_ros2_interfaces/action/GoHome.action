@@ -1,0 +1,14 @@
+#### Request ####
+bool clear_planning_scene
+---
+#### Result ####
+
+# Status of the tree
+NodeStatus node_status
+# result payload or error message
+string message
+---
+#### Feedback ####
+
+#This can be customized by the user
+string message
