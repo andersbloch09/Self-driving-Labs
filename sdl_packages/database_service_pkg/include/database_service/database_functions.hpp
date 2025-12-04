@@ -124,6 +124,19 @@ bool moveContainerToStorageObjectByName(const std::string& container_name, const
 
 // Get slot transform by slot name
 std::string getSlotTransform(const std::string& slot_name);
+// Material tracking convenience functions
+int getAvailableSlotsCount(const std::string& storage_object_name);
+
+std::vector<std::string> getContainersInStorageObjectByNames(
+    const std::string& storage_object_name, 
+    const std::vector<std::string>& container_names);
+
+std::vector<std::string> getContainersWithMaterials(
+    const std::vector<std::string>& material_names);
+
+std::vector<std::string> getMaterialsNeedingTransport(
+    const std::vector<std::string>& material_names,
+    const std::map<std::string, std::string>& destination_map);
 
 // Get slot transform by slot name
 std::string getSlotTransform(const std::string& slot_name);

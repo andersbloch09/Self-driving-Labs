@@ -21,6 +21,8 @@ find_package(control_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(database_service REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(database_service REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 include_directories(include)
 
@@ -59,7 +61,20 @@ function(create_franka_bt_plugin plugin_name source_file)
   )
   target_compile_definitions(${plugin_name} PRIVATE BT_PLUGIN_EXPORT)
   ament_target_dependencies(${plugin_name} 
-    rclcpp rclcpp_action behaviortree_ros2 control_msgs btcpp_ros2_interfaces btcpp_ros2_interfaces btcpp_ros2_interfaces pluginlib
+    rclcpp rclcpp_action behaviortree_ros2 control_msgs btcpp_ros2_interfaces pluginlib
+  )
+endfunction()
+
+# Helper function for material tracking plugins
+function(create_material_tracking_plugin plugin_name source_file)
+  add_library(${plugin_name} SHARED ${source_file})
+  set_target_properties(${plugin_name} PROPERTIES
+    CXX_VISIBILITY_PRESET default
+    VISIBILITY_INLINES_HIDDEN OFF
+  )
+  target_compile_definitions(${plugin_name} PRIVATE BT_PLUGIN_EXPORT)
+  ament_target_dependencies(${plugin_name} 
+    rclcpp behaviortree_ros2 database_service nlohmann_json pluginlib
   )
 endfunction()
 
@@ -87,6 +102,9 @@ create_franka_bt_plugin(FrankaTrajectoryAction src/FrankaTrajectoryAction.cpp)
 create_franka_bt_plugin(FrankaCalibrationAction src/FrankaCalibrationAction.cpp)
 create_franka_bt_plugin(PickUpAction src/PickUpAction.cpp)
 create_franka_bt_plugin(PlaceAction src/PlaceAction.cpp)
+
+# Create Material Tracking plugins
+create_material_tracking_plugin(MaterialTrackingNodes src/material_tracking_nodes.cpp)
 create_franka_bt_plugin(GoHome src/GoHome.cpp)
 
 # Create Material Tracking plugins
@@ -102,14 +120,14 @@ ament_target_dependencies(bt_server
 install(TARGETS bt_server DESTINATION lib/${PROJECT_NAME})
 
 # Install plugin libraries
-install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction GoHome MaterialTrackingNodes
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes GoHome MaterialTrackingNodes
   DESTINATION lib/${PROJECT_NAME}
 )
 install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
 install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
   DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes MaterialTrackingNodes
   DESTINATION share/${PROJECT_NAME}/plugins
 )
 

@@ -960,6 +960,238 @@ bool moveContainerToStorageObjectByName(const std::string& container_name, const
     return DatabaseHelpers::getInstance().moveContainerToStorageObjectByName(container_name, storage_object_name);
 }
 
+// Material tracking functions
+int DatabaseHelpers::getAvailableSlotsCount(const std::string& storage_object_name)
+{
+    try {
+        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
+        if (!connection) {
+            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
+            return 0;
+        }
+        pqxx::work transaction(*connection);
+        
+        // Count available (empty) slots in the storage object
+        std::string query = R"(
+            SELECT COUNT(*) 
+            FROM slots s
+            JOIN storage_objects so ON s.storage_object_id = so.id
+            WHERE so.name = )" + transaction.quote(storage_object_name) + R"(
+            AND s.container_id IS NULL;
+        )";
+        
+        pqxx::result result = transaction.exec(query);
+        
+        if (result.empty()) {
+            return 0;
+        }
+        
+        int available_count = result[0][0].as<int>();
+        transaction.commit();
+        
+        RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                   "Storage object '%s' has %d available slots", 
+                   storage_object_name.c_str(), available_count);
+        
+        return available_count;
+        
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                    "Error counting available slots: %s", e.what());
+        return 0;
+    }
+}
+
+std::vector<std::string> DatabaseHelpers::getContainersInStorageObjectByNames(
+    const std::string& storage_object_name, 
+    const std::vector<std::string>& container_names)
+{
+    std::vector<std::string> found_containers;
+    
+    try {
+        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
+        if (!connection) {
+            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
+            return found_containers;
+        }
+        pqxx::work transaction(*connection);
+        
+        // Build IN clause for container names
+        std::string names_list;
+        for (size_t i = 0; i < container_names.size(); ++i) {
+            if (i > 0) names_list += ", ";
+            names_list += transaction.quote(container_names[i]);
+        }
+        
+        // Find which of the specified containers are in this storage object
+        std::string query = R"(
+            SELECT c.name 
+            FROM containers c
+            JOIN slots s ON c.current_slot_id = s.id
+            JOIN storage_objects so ON s.storage_object_id = so.id
+            WHERE so.name = )" + transaction.quote(storage_object_name) + R"(
+            AND c.name IN ()" + names_list + R"()
+            ORDER BY c.name;
+        )";
+        
+        pqxx::result result = transaction.exec(query);
+        
+        for (const auto& row : result) {
+            found_containers.push_back(row[0].as<std::string>());
+        }
+        
+        transaction.commit();
+        
+        RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                   "Found %zu containers from material list in '%s'", 
+                   found_containers.size(), storage_object_name.c_str());
+        
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                    "Error finding containers in storage object: %s", e.what());
+    }
+    
+    return found_containers;
+}
+
+std::vector<std::string> DatabaseHelpers::getContainersWithMaterials(
+    const std::vector<std::string>& material_names)
+{
+    std::vector<std::string> container_names;
+    
+    try {
+        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
+        if (!connection) {
+            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
+            return container_names;
+        }
+        pqxx::work transaction(*connection);
+        
+        // For each material, find containers that have it in their contents
+        for (const auto& material : material_names) {
+            std::string query = R"(
+                SELECT name 
+                FROM containers 
+                WHERE contents ? )" + transaction.quote(material) + R"(
+                LIMIT 1;
+            )";
+            
+            pqxx::result result = transaction.exec(query);
+            
+            if (!result.empty()) {
+                std::string container_name = result[0][0].as<std::string>();
+                container_names.push_back(container_name);
+                RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                           "Material '%s' found in container '%s'", 
+                           material.c_str(), container_name.c_str());
+            } else {
+                RCLCPP_WARN(rclcpp::get_logger("database_helpers"), 
+                           "No container found containing material '%s'", material.c_str());
+            }
+        }
+        
+        transaction.commit();
+        
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                    "Error finding containers with materials: %s", e.what());
+    }
+    
+    return container_names;
+}
+
+std::vector<std::string> DatabaseHelpers::getMaterialsNeedingTransport(
+    const std::vector<std::string>& material_names,
+    const std::map<std::string, std::string>& destination_map)
+{
+    std::vector<std::string> needs_transport;
+    
+    try {
+        RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                   "Checking which of %zu materials need transport...", material_names.size());
+        
+        for (const auto& material : material_names) {
+            // Get destination for this material
+            auto dest_it = destination_map.find(material);
+            if (dest_it == destination_map.end()) {
+                RCLCPP_WARN(rclcpp::get_logger("database_helpers"), 
+                           "No destination specified for material '%s', skipping", material.c_str());
+                continue;
+            }
+            std::string destination = dest_it->second;
+            
+            // Find container with this material and get its current location
+            auto containers = getContainersWithMaterials({material});
+            if (containers.empty()) {
+                RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                            "Cannot find container with material '%s' in database", material.c_str());
+                continue;
+            }
+            
+            std::string container_name = containers[0];
+            std::string current_location = getContainerStorageObjectByContainerName(container_name);
+            
+            if (current_location.empty()) {
+                RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                            "Cannot determine location for container '%s'", container_name.c_str());
+                continue;
+            }
+            
+            // Check if already at destination
+            if (current_location == destination) {
+                RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                           "✅ Material '%s' (in '%s') already at destination '%s'", 
+                           material.c_str(), container_name.c_str(), destination.c_str());
+            } else if (current_location == "storage_mir") {
+                RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                           "🚚 Material '%s' (in '%s') currently on transport vehicle", 
+                           material.c_str(), container_name.c_str());
+            } else {
+                RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                           "📦 Material '%s' (in '%s') needs transport: %s → %s", 
+                           material.c_str(), container_name.c_str(), 
+                           current_location.c_str(), destination.c_str());
+                needs_transport.push_back(material);
+            }
+        }
+        
+        RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                   "Result: %zu materials need transport", needs_transport.size());
+        
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
+                    "Error determining materials needing transport: %s", e.what());
+    }
+    
+    return needs_transport;
+}
+
+// Convenience wrappers
+int getAvailableSlotsCount(const std::string& storage_object_name)
+{
+    return DatabaseHelpers::getInstance().getAvailableSlotsCount(storage_object_name);
+}
+
+std::vector<std::string> getContainersInStorageObjectByNames(
+    const std::string& storage_object_name, 
+    const std::vector<std::string>& container_names)
+{
+    return DatabaseHelpers::getInstance().getContainersInStorageObjectByNames(storage_object_name, container_names);
+}
+
+std::vector<std::string> getContainersWithMaterials(
+    const std::vector<std::string>& material_names)
+{
+    return DatabaseHelpers::getInstance().getContainersWithMaterials(material_names);
+}
+
+std::vector<std::string> getMaterialsNeedingTransport(
+    const std::vector<std::string>& material_names,
+    const std::map<std::string, std::string>& destination_map)
+{
+    return DatabaseHelpers::getInstance().getMaterialsNeedingTransport(material_names, destination_map);
+}
+
 std::string getSlotTransform(const std::string& slot_name)
 {
     return DatabaseHelpers::getInstance().getSlotTransform(slot_name);
