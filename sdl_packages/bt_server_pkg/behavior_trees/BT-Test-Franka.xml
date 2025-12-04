@@ -1,8 +1,0 @@
- <root BTCPP_format="4" >
-     <BehaviorTree ID="BT_Test_Franka">
-        <Sequence name="root_sequence">
-            <FrankaAction name="franka_move_square"
-                             action_name="move_in_square" />
-        </Sequence>
-     </BehaviorTree>
- </root>

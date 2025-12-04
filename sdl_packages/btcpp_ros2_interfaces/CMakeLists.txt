@@ -15,6 +15,7 @@ rosidl_generate_interfaces(btcpp_ros2_interfaces
     "action/CubeVisualCalibration.action"
     "action/PickUp.action"
     "action/Place.action"
+    "action/GoHome.action"
     )
    
 
