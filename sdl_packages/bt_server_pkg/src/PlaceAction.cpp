@@ -10,8 +10,15 @@ bool PlaceAction::setGoal(Goal& goal)
         return false;
     }
     
+    auto slot_name = getInput<std::string>("slot_name");
+    if (!slot_name) {
+        logError(logger(), "Missing required input [slot_name]");
+        return false;
+    }
+
     goal.container_name = container_name.value();
-    logInfo(logger(), "Setting goal to place container: " + goal.container_name);
+    goal.slot_name = slot_name.value();
+    logInfo(logger(), "Setting goal to place container: " + goal.container_name + " in slot: " + goal.slot_name);
     return true;
 }
 

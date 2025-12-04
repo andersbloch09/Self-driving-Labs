@@ -31,9 +31,13 @@
         "--device=/dev/bus/usb",
         "--device-cgroup-rule=c 81:* rmw"
     ],
+    "containerEnv": {
+    "ROS_DOMAIN_ID": "42"
+    },
     "hostRequirements": {
         "gpu": "optional"
-    },/*
+    },
+    /*
     "containerEnv": {
         "DISPLAY": "${localEnv:DISPLAY}",
         "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",

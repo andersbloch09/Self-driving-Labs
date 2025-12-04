@@ -5,6 +5,7 @@
 #include "btcpp_ros2_interfaces/action/cube_visual_calibration.hpp"
 #include "btcpp_ros2_interfaces/action/pick_up.hpp"
 #include "btcpp_ros2_interfaces/action/place.hpp"
+#include "btcpp_ros2_interfaces/action/go_home.hpp"
 
 using namespace BT;
 
@@ -88,7 +89,8 @@ public:
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("container_name", "Container name for pick operation")
+            InputPort<std::string>("container_name", "Container name for pick operation"),
+            InputPort<bool>("is_ot", "Is the container going to be placed in the OT")
         });
     }
 
@@ -97,6 +99,33 @@ public:
     NodeStatus onFailure(ActionNodeErrorCode error) override;
     void onHalt() override;
 };
+
+
+// =============================================================================
+//  Go Home Action
+// =============================================================================
+class GoHomeAction 
+    : public RosActionNode<btcpp_ros2_interfaces::action::GoHome>,
+      public FrankaActionBase
+{
+public:
+    GoHomeAction(const std::string& name, const NodeConfig& config, const RosNodeParams& params)
+        : RosActionNode<btcpp_ros2_interfaces::action::GoHome>(name, config, params)
+    {}
+
+    static PortsList providedPorts()
+    {
+        return providedBasicPorts({
+            InputPort<bool>("clear_planning_scene", "Whether to clear the planning scene before going home")
+        });
+    }
+
+    bool setGoal(Goal& goal) override;
+    NodeStatus onResultReceived(const WrappedResult& result) override;
+    NodeStatus onFailure(ActionNodeErrorCode error) override;
+    void onHalt() override;
+};
+
 
 // =============================================================================
 // Place Action (for placing containers)
@@ -113,7 +142,8 @@ public:
     static PortsList providedPorts()
     {
         return providedBasicPorts({
-            InputPort<std::string>("container_name", "Container name for place operation")
+            InputPort<std::string>("container_name", "Container name for place operation"),
+            InputPort<std::string>("slot_name", "Slot name where the container should be placed")
         });
     }
 

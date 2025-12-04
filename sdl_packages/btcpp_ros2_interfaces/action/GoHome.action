@@ -1,6 +1,5 @@
 #### Request ####
-string container_name
-bool is_ot
+bool clear_planning_scene
 ---
 #### Result ####
 

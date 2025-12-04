@@ -411,16 +411,34 @@ void Robot::setFullCollisionBehavior(
 }
 
 void Robot::setDefaultParams(){
+  // Joint and Cartesian Impedance remain unchanged for stability
   robot_->setJointImpedance({{3000, 3000, 3000, 2500, 2500, 2000, 2000}});
   robot_->setCartesianImpedance({{3000, 3000, 3000, 300, 300, 300}});
+
+  // **********************************************
+  // ** COLLISION BEHAVIOR (THRESHOLDS DOUBLED) **
+  // **********************************************
   robot_->setCollisionBehavior(
-        {{20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0}}, {{20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0}},
-        {{20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0}}, {{20.0, 20.0, 18.0, 18.0, 16.0, 14.0, 12.0}},
-        {{20.0, 20.0, 20.0, 25.0, 25.0, 25.0}}, {{20.0, 20.0, 20.0, 25.0, 25.0, 25.0}},
-        {{20.0, 20.0, 20.0, 25.0, 25.0, 25.0}}, {{20.0, 20.0, 20.0, 25.0, 25.0, 25.0}});
+        // 1. Lower Torque (Acceleration) - Scaled up by 2x
+        {{40.0, 40.0, 36.0, 36.0, 32.0, 28.0, 24.0}},
+        // 2. Upper Torque (Acceleration) - Scaled up by 2x
+        {{40.0, 40.0, 36.0, 36.0, 32.0, 28.0, 24.0}},
+        // 3. Lower Torque (Nominal) - Scaled up by 2x
+        {{40.0, 40.0, 36.0, 36.0, 32.0, 28.0, 24.0}},
+        // 4. Upper Torque (Nominal) - Scaled up by 2x
+        {{40.0, 40.0, 36.0, 36.0, 32.0, 28.0, 24.0}},
+
+        // 5. Lower Force (Acceleration) - F_xyz to 40.0, T_xyz to 50.0
+        {{40.0, 40.0, 40.0, 50.0, 50.0, 50.0}},
+        // 6. Upper Force (Acceleration) - F_xyz to 40.0, T_xyz to 50.0
+        {{40.0, 40.0, 40.0, 50.0, 50.0, 50.0}},
+        // 7. Lower Force (Nominal) - F_xyz to 40.0, T_xyz to 50.0
+        {{40.0, 40.0, 40.0, 50.0, 50.0, 50.0}},
+        // 8. Upper Force (Nominal) - F_xyz to 40.0, T_xyz to 50.0
+        {{40.0, 40.0, 40.0, 50.0, 50.0, 50.0}});
+
   init_params_set = true;
 }
-
 //##############################//
 // Internal param setters       //
 //##############################//

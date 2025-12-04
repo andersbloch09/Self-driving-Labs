@@ -87,6 +87,7 @@ create_franka_bt_plugin(FrankaTrajectoryAction src/FrankaTrajectoryAction.cpp)
 create_franka_bt_plugin(FrankaCalibrationAction src/FrankaCalibrationAction.cpp)
 create_franka_bt_plugin(PickUpAction src/PickUpAction.cpp)
 create_franka_bt_plugin(PlaceAction src/PlaceAction.cpp)
+create_franka_bt_plugin(GoHome src/GoHome.cpp)
 
 # Create Material Tracking plugins
 create_material_tracking_plugin(MaterialTrackingNodes src/material_tracking_nodes.cpp)
@@ -101,7 +102,7 @@ ament_target_dependencies(bt_server
 install(TARGETS bt_server DESTINATION lib/${PROJECT_NAME})
 
 # Install plugin libraries
-install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
+install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction GoHome MaterialTrackingNodes
   DESTINATION lib/${PROJECT_NAME}
 )
 install(TARGETS GoToMission OpenTrons2RunProtocol FrankaTrajectoryAction FrankaCalibrationAction PickUpAction PlaceAction MaterialTrackingNodes
