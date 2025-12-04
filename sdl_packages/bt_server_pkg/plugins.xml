@@ -33,3 +33,21 @@
     <description>Places a container using Franka manipulator</description>
   </class>
 </library>
+
+<library path="MaterialTrackingNodes">
+  <class type="HasPendingMaterialsCondition" base_class_type="BT::TreeNode">
+    <description>Checks if there are materials still pending transport (queries database)</description>
+  </class>
+  <class type="PlanNextBatchAction" base_class_type="BT::TreeNode">
+    <description>Plans the next batch of materials to load based on available slots</description>
+  </class>
+  <class type="LoadMaterialsAction" base_class_type="BT::TreeNode">
+    <description>Loads materials from source onto transport vehicle</description>
+  </class>
+  <class type="UnloadMaterialsAction" base_class_type="BT::TreeNode">
+    <description>Unloads materials from transport vehicle to their destinations</description>
+  </class>
+  <class type="GetMissionForLocationAction" base_class_type="BT::TreeNode">
+    <description>Maps storage location to MiR mission ID</description>
+  </class>
+</library>

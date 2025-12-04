@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <memory>
 
 namespace database_lib {
@@ -59,6 +60,20 @@ public:
     
     bool moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name);
 
+    // Material tracking functions for multi-trip transport
+    int getAvailableSlotsCount(const std::string& storage_object_name);
+    
+    std::vector<std::string> getContainersInStorageObjectByNames(
+        const std::string& storage_object_name, 
+        const std::vector<std::string>& container_names);
+    
+    std::vector<std::string> getContainersWithMaterials(
+        const std::vector<std::string>& material_names);
+    
+    std::vector<std::string> getMaterialsNeedingTransport(
+        const std::vector<std::string>& material_names,
+        const std::map<std::string, std::string>& destination_map);
+
 private:
     std::string db_name_;
     std::string db_user_;
@@ -103,5 +118,19 @@ std::string getContainerStorageObjectByContainerName(const std::string& containe
 bool moveContainerToStorageObject(const std::string& container_id, const std::string& storage_object_name);
 
 bool moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name);
+
+// Material tracking convenience functions
+int getAvailableSlotsCount(const std::string& storage_object_name);
+
+std::vector<std::string> getContainersInStorageObjectByNames(
+    const std::string& storage_object_name, 
+    const std::vector<std::string>& container_names);
+
+std::vector<std::string> getContainersWithMaterials(
+    const std::vector<std::string>& material_names);
+
+std::vector<std::string> getMaterialsNeedingTransport(
+    const std::vector<std::string>& material_names,
+    const std::map<std::string, std::string>& destination_map);
 
 } // namespace database_lib

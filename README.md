@@ -127,3 +127,25 @@ ssh -L 8888:192.168.0.30:443 sdl@192.168.1.42
 This SSH session should be running at all times.
 Then open https://robot.franka.de:8888/desk/ using google chrome, ignoring the warnings and proceeding to the site. Run homing of the manipulator and activate FCI in the dropdown menu in the top right corner. This enables movements triggered by ROS.
 
+
+
+```bash
+ros2 action send_goal /bt_execution \
+btcpp_ros2_interfaces/action/ExecuteTree \
+"{target_tree: 'MaterialTransport', \
+  payload: '{ \
+     \"materials\": [\"FehlingsSolution\", \"GlucoseSolution\", \"PipetteTips\"], \
+     \"destination_map\": { \
+        \"FehlingsSolution\": \"storage_ot2\", \
+        \"GlucoseSolution\": \"storage_ot2\", \
+        \"PipetteTips\": \"storage_ot2\" \
+     }, \
+     \"mission_map\": { \
+        \"storage_jig_A\": \"94c9f0cf-a4f7-11f0-b2e5-000e8e984489\", \
+        \"storage_ot2\": \"a1b2c3d4-e5f6-7890-1234-567890abcdef\", \
+        \"storage_mir\": \"76638485-a4f7-11f0-b2e5-000e8e984489\" \
+     }, \
+     \"transport_storage\": \"storage_mir\" \
+  }' \
+}" --feedback
+```

@@ -7,13 +7,13 @@
 // Include our action node headers
 #include "bt_server_pkg/mir_mission_action.hpp"
 
-class MirBehaviorTreeServer : public BT::TreeExecutionServer
+class BehaviorTreeServer : public BT::TreeExecutionServer
 {
 public:
-  MirBehaviorTreeServer(const rclcpp::NodeOptions& options) 
+  BehaviorTreeServer(const rclcpp::NodeOptions& options) 
     : TreeExecutionServer(std::make_shared<rclcpp::Node>("bt_action_server", options))
   {
-    RCLCPP_INFO(node()->get_logger(), "MiR Behavior Tree Server initialized");
+    RCLCPP_INFO(node()->get_logger(), "Behavior Tree Server initialized");
   }
 
 protected:
@@ -63,8 +63,8 @@ int main(int argc, char* argv[])
 {
   rclcpp::init(argc, argv);
   rclcpp::NodeOptions options;
-  auto action_server = std::make_shared<MirBehaviorTreeServer>(options);
-  RCLCPP_INFO(action_server->node()->get_logger(), "MiR Behavior Tree Server starting...");
+  auto action_server = std::make_shared<BehaviorTreeServer>(options);
+  RCLCPP_INFO(action_server->node()->get_logger(), "Behavior Tree Server starting...");
   // Use MultiThreadedExecutor to handle action clients properly
   rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), 0, false,
                                                 std::chrono::milliseconds(250));

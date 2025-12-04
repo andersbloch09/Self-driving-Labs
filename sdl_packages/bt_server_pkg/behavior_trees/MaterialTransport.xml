@@ -1,0 +1,92 @@
+<root BTCPP_format="4">
+    <BehaviorTree ID="MaterialTransport">
+        <Sequence name="material_transport_sequence">
+            <!-- Main transport loop: Repeat until all materials at destinations -->
+            <RepeatUntilSuccessful num_cycles="-1" name="transport_loop">
+                <Sequence name="single_trip">
+                    <!-- 1. Check if all materials are at their destinations (database query) -->
+                    <Inverter name="check_completion">
+                        <HasPendingMaterialsCondition name="has_pending_materials"
+                                                     materials_json="{materials}"
+                                                     destination_map_json="{destination_map}"
+                                                     pending_count="{pending_count}" />
+                    </Inverter>
+                    
+                    <!-- 2. Plan next batch (queries database for material locations & MiR capacity) -->
+                    <PlanNextBatchAction name="plan_batch"
+                                        materials_json="{materials}"
+                                        destination_map_json="{destination_map}"
+                                        transport_storage="{transport_storage}"
+                                        batch_json="{batch_json}"
+                                        source_location="{source_location}"
+                                        batch_size="{batch_size}" />
+                    
+                    <!-- 3. Get mission ID for source location -->
+                    <GetMissionForLocationAction name="get_source_mission"
+                                                storage_location="{source_location}"
+                                                mission_map_json="{mission_map}"
+                                                mission_id="{source_mission_id}" />
+                    
+                    <!-- 4. Drive to source location -->
+                    <GoToMission name="go_to_source" 
+                                action_name="go_to_mission"
+                                mission_id="{source_mission_id}" />
+                    
+                    <!-- 5. Load materials onto MiR (using Franka) -->
+                    <Sequence name="load_sequence">
+                        <!-- Home manipulator before loading -->
+                        <FrankaTrajectoryAction name="home_before_load"
+                                               action_name="go_home" />
+                        
+                        <!-- Calibrate camera for precise picking -->
+                        <FrankaCalibrationAction name="calibrate_for_loading"
+                                                action_name="cube_visual_calibration"
+                                                side="left" />
+                        
+                        <!-- Load the planned batch (database updated) -->
+                        <LoadMaterialsAction name="load_materials"
+                                            batch_json="{batch_json}"
+                                            transport_storage="{transport_storage}" />
+                    </Sequence>
+                    
+                    <!-- 6. Get first destination from batch (simplified: assume same destination) -->
+                    <!-- Note: In future, could sort batch by destination and deliver in sub-trips -->
+                    <Script code="first_material := batch_json[0]" />
+                    <Script code="first_destination := destination_map[first_material]" />
+                    
+                    <!-- 7. Get mission ID for destination -->
+                    <GetMissionForLocationAction name="get_dest_mission"
+                                                storage_location="{first_destination}"
+                                                mission_map_json="{mission_map}"
+                                                mission_id="{dest_mission_id}" />
+                    
+                    <!-- 8. Drive to destination -->
+                    <GoToMission name="go_to_destination" 
+                                action_name="go_to_mission"
+                                mission_id="{dest_mission_id}" />
+                    
+                    <!-- 9. Unload materials at destination -->
+                    <Sequence name="unload_sequence">
+                        <!-- Home manipulator before unloading -->
+                        <FrankaTrajectoryAction name="home_before_unload"
+                                               action_name="go_home" />
+                        
+                        <!-- Placeholder for OpenTrons placement (not implemented yet) -->
+                        <!-- <PlaceOpentronsAction .../> -->
+                        
+                        <!-- Unload materials from MiR (database updated with destinations) -->
+                        <UnloadMaterialsAction name="unload_materials"
+                                              materials_json="{materials}"
+                                              destination_map_json="{destination_map}"
+                                              transport_storage="{transport_storage}" />
+                    </Sequence>
+                    
+                    <!-- Return to start of loop to check if more trips needed -->
+                </Sequence>
+            </RepeatUntilSuccessful>
+            
+            <!-- All materials at their destinations! -->
+            <AlwaysSuccess name="complete" />
+        </Sequence>
+    </BehaviorTree>
+</root>

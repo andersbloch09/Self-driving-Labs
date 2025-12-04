@@ -1,0 +1,84 @@
+<root BTCPP_format="4">
+    <BehaviorTree ID="MaterialTransportTest">
+        <!-- 
+        Simplified test tree for material transport
+        
+        All parameters come from the action payload:
+        - materials: JSON array of material names (e.g., ["FehlingsSolution", "GlucoseSolution"])
+        - destination_map: JSON object mapping materials to destinations
+        - mission_map: JSON object mapping storage locations to mission IDs
+        - transport_storage: MiR storage location (default: "storage_mir")
+        
+        Example usage:
+        ros2 action send_goal /bt_execution btcpp_ros2_interfaces/action/ExecuteTree \
+          "{target_tree: 'MaterialTransportTest', \
+            payload: '{ \
+              \"materials\": [\"FehlingsSolution\", \"GlucoseSolution\"], \
+              \"destination_map\": {\"FehlingsSolution\": \"storage_ot2\", \"GlucoseSolution\": \"storage_ot2\"}, \
+              \"mission_map\": {\"storage_jig_A\": \"uuid1\", \"storage_ot2\": \"uuid2\"}, \
+              \"transport_storage\": \"storage_mir\" \
+            }' \
+          }"
+        -->
+        
+        <Sequence name="test_sequence">
+            <!-- Execute multi-trip transport -->
+            <RepeatUntilSuccessful num_cycles="-1" name="transport_loop">
+                <Sequence name="single_trip">
+                    <!-- Check if done -->
+                    <Inverter>
+                        <HasPendingMaterialsCondition name="check_pending"
+                                                     materials_json="{materials}"
+                                                     destination_map_json="{destination_map}"
+                                                     pending_count="{pending_count}" />
+                    </Inverter>
+                    
+                    <!-- Plan batch (determines source location from database) -->
+                    <PlanNextBatchAction name="plan_batch"
+                                        materials_json="{materials}"
+                                        destination_map_json="{destination_map}"
+                                        transport_storage="{transport_storage}"
+                                        batch_json="{batch_json}"
+                                        source_location="{source_location}"
+                                        batch_size="{batch_size}" />
+                    
+                    <!-- Get mission for source -->
+                    <GetMissionForLocationAction name="get_source_mission"
+                                                storage_location="{source_location}"
+                                                mission_map_json="{mission_map}"
+                                                mission_id="{source_mission_id}" />
+                    
+                    <!-- Go to source -->
+                    <GoToMission name="go_to_source" 
+                                action_name="go_to_mission"
+                                mission_id="{source_mission_id}" />
+                    
+                    <!-- Load -->
+                    <LoadMaterialsAction name="load"
+                                        batch_json="{batch_json}"
+                                        transport_storage="{transport_storage}" />
+                    
+                    <!-- Get first material's destination -->
+                    <Script code="first_destination := destination_map[batch_json[0]]" />
+                    
+                    <!-- Get mission for destination -->
+                    <GetMissionForLocationAction name="get_dest_mission"
+                                                storage_location="{first_destination}"
+                                                mission_map_json="{mission_map}"
+                                                mission_id="{dest_mission_id}" />
+                    
+                    <!-- Go to destination -->
+                    <GoToMission name="go_to_dest" 
+                                action_name="go_to_mission"
+                                mission_id="{dest_mission_id}" />
+                    
+                    <!-- Unload -->
+                    <UnloadMaterialsAction name="unload"
+                                          materials_json="{materials}"
+                                          destination_map_json="{destination_map}"
+                                          transport_storage="{transport_storage}" />
+                </Sequence>
+            </RepeatUntilSuccessful>
+        </Sequence>
+    </BehaviorTree>
+</root>
