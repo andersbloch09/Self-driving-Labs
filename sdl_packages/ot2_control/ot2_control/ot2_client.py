@@ -206,12 +206,12 @@ class OT2Client:
         custom_labware = self.verify_labware(node, protocol_path, custom_labware_folder)
         protocol_id = self.upload_protocol(node, protocol_path, custom_labware)
         run_id = self.create_run(node, protocol_id, params)
-        labware = self.get_labware_used(protocol_id, run_id)
+        #labware = self.get_labware_used(protocol_id, run_id)
         self.start_run(node, run_id)
         status = self.get_run_status(run_id)
         #print(status)
 
-        return status, run_id, protocol_id, labware
+        return status, run_id, protocol_id#, labware
     
     
     def get_protocols(self):

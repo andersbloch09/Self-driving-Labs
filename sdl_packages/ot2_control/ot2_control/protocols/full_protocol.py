@@ -57,7 +57,7 @@ def generate_concentrations(max_conc, min_conc, n, dtype="linear"):
     # log (geometric) spacing
     if max_c <= 0 or min_c <= 0:
         raise ValueError("For log spacing, both concentrations must be > 0")
-
+    #logarithmic method
     ratio = (min_c / max_c) ** (1.0 / (n - 1))
     result = []
     for i in range(n):
@@ -69,6 +69,7 @@ def current_time():
 
 def wait_until(time_target):
     while current_time() < time_target:
+
         time.sleep(0.5)
 
 
@@ -99,9 +100,9 @@ def add_parameters(parameters: protocol_api.ParameterContext):
         variable_name="C_stock",
         display_name="Stock Concentration (%)",
         description="Concentration of the stock solution.",
-        default=5,
-        minimum=0.1,
-        maximum=5
+        default=0.3,
+        minimum=0.0,
+        maximum=0.3
     )
 
     parameters.add_float(
@@ -135,18 +136,18 @@ def add_parameters(parameters: protocol_api.ParameterContext):
         variable_name="max_concentration",
         display_name="Max Concentration (%)",
         description="Maximum concentration for dilution series.",
-        default=5,
-        minimum=0.1,
-        maximum=5
+        default=0.3,
+        minimum=0.0,
+        maximum=0.3
     )
 
     parameters.add_float(
         variable_name="min_concentration",
         display_name="Min Concentration (%)",
         description="Minimum concentration for dilution series.",
-        default=5,
-        minimum=0.1,
-        maximum=5
+        default=0.3,
+        minimum=0.0,
+        maximum=0.3
     )
 
     parameters.add_str(
@@ -159,6 +160,32 @@ def add_parameters(parameters: protocol_api.ParameterContext):
         default="linear"
     )
 
+    parameters.add_float(
+        variable_name="v_stock_start",
+        display_name="Initial Stock Volume (µL)",
+        description="Initial volume of stock solution available.",
+        default=10000,
+        minimum=1000,
+        maximum=100000
+    )
+
+    parameters.add_float(
+        variable_name="v_water_start",
+        display_name="Initial Water Volume (µL)",
+        description="Initial volume of water available.",
+        default=10000,
+        minimum=1000,
+        maximum=100000
+    )
+
+    parameters.add_float(
+        variable_name="v_container",
+        display_name="Container Volume (µL)",
+        description="Volume of the ingredient container.",
+        default=10000,
+        minimum=1000,
+        maximum=100000
+    )
 
 def run(protocol: protocol_api.ProtocolContext):
     
@@ -179,36 +206,31 @@ def run(protocol: protocol_api.ProtocolContext):
 
     protocol.comment("Processing " + str(protocol.params.sample_count) + " samples.")
 
-    large_tips = protocol.load_labware("opentrons_96_tiprack_300ul", 5)
-    large_tips.set_offset(x=0.0, y=-0.9, z=0.0)
-
-    small_tips = protocol.load_labware("opentrons_96_tiprack_20ul", 4)
-    small_tips.set_offset(x=-0.3, y=-2.0, z=0.0)
+    large_tips = protocol.load_labware("opentrons_96_tiprack_300ul", 9)
+    large_tips.set_offset(x=0.5, y=-0.3, z=0.0)
 
     cuvette_rack = protocol.load_labware("aau_24_tuberack_3000ul", 1)
-    cuvette_rack.set_offset(x=-0.8, y=-1.9, z=0.0)
+    cuvette_rack.set_offset(x=-0.7, y=-1.7, z=6.0)
 
-    sample_ingredients = protocol.load_labware("aau_24_tuberack_10000ul", 2)
-    sample_ingredients.set_offset(x=-0.7, y=-0.9, z=0.0)
+    sample_ingredients = protocol.load_labware("aau_24_tuberack_10000ul", 3)
+    sample_ingredients.set_offset(x=-0.7, y=-0.9, z=6.0)
 
-    fehlings_ingredients = protocol.load_labware("aau_24_tuberack_10000ul", 3)
-    fehlings_ingredients.set_offset(x=-0.2, y=-0.1, z=0.0)
+    fehlings_ingredients = protocol.load_labware("aau_24_tuberack_10000ul", 2)
+    fehlings_ingredients.set_offset(x=-0.7, y=-1.0, z=6.0)
 
-    water_bath = protocol.load_labware("aau_144_tiprack_3000ul", 7)
-    water_bath.set_offset(x=0.5, y=-1.5, z=1.8) 
+    water_bath = protocol.load_labware("aau_144_tiprack_3000ul", 10)
+    water_bath.set_offset(x=1.0, y=-1.4, z=1.7) 
 
-    fehlings_mix = protocol.load_labware("aau_24_tuberack_3000ul", 6)
-    fehlings_mix.set_offset(x=-0.2, y=-0.4, z=0.0)
+    fehlings_mix = protocol.load_labware("aau_24_tuberack_3000ul", 8)
+    fehlings_mix.set_offset(x=0.0, y=-0.5, z=0.0)
 
-    samples = protocol.load_labware("aau_24_tuberack_3000ul", 9)
-    samples.set_offset(x=0.3, y=-0.4, z=0.0)
+    samples = protocol.load_labware("aau_24_tuberack_3000ul", 11)
+    samples.set_offset(x=0.5, y=-0.8, z=0.0)
 
     #loading pipettes
     right_pipette = protocol.load_instrument("p300_single_gen2", "right", tip_racks=[large_tips])
-    left_pipette = protocol.load_instrument("p20_single_gen2", "left", tip_racks=[small_tips])
 
     right_pipette.starting_tip = large_tips.wells()[protocol.params.large_tips_used]
-    left_pipette.starting_tip = small_tips.wells()[protocol.params.small_tips_used]
 
     #initialize pipette tip counters
     small_pipettes = int(0)
@@ -221,7 +243,7 @@ def run(protocol: protocol_api.ProtocolContext):
     #calculate volumes needed for each concentration
 
     c1 = protocol.params.C_stock
-    v2 = protocol.params.v_f
+    v_f = protocol.params.v_f
     c2_list = generate_concentrations(protocol.params.max_concentration,
                                      protocol.params.min_concentration,
                                      protocol.params.sample_count,
@@ -232,28 +254,31 @@ def run(protocol: protocol_api.ProtocolContext):
     if len(c2_list) != protocol.params.sample_count:
         raise ValueError("Number of concentrations provided does not match sample count.")
 
-    v1 = []
+    v_stock = []
     v_water = []
     stock_used = 0.0
     water_used = 0.0
-    
-    for i in range(protocol.params.sample_count):
-        c2 = c2_list[i]
-        v1_value = (c2 * v2) / c1
-        v1.append(v1_value)
-        v_water.append(v2 - v1_value)
+
+    sample_count = protocol.params.sample_count
+
+
+    for i in range(sample_count):
+        c_stock = c2_list[i]
+        v_stock_value = (c_stock * v_f) / c1
+        v_stock.append(v_stock_value)
+        v_water.append(v_f - v_stock_value)
 
     #prepare samples with calculated volumes
-    for i in range(protocol.params.sample_count):
-        if v1[i] > 0:
+    for i in range(sample_count):
+        if v_stock[i] > 0:
             #adding glucose stock solution to sample wells
-            right_pipette.transfer(v1[i], sample_ingredients["B1"], samples.wells()[i])
+            right_pipette.transfer(v_stock[i], fehlings_ingredients["B1"], samples.wells()[i])
             large_pipettes += 1
-            stock_used += v1[i]
+            stock_used += v_stock[i]
         
         if v_water[i] > 0:
             #adding water to sample wells
-            right_pipette.transfer(v_water[i], sample_ingredients["B2"], samples.wells()[i])
+            right_pipette.transfer(v_water[i], fehlings_ingredients["B2"], samples.wells()[i])
             large_pipettes += 1
             water_used += v_water[i]
         
@@ -273,7 +298,7 @@ def run(protocol: protocol_api.ProtocolContext):
         del protocol.deck["1"]
 
         cuvette_for_transfer = protocol.load_labware("aau_96_tiprack_3000ul", 1)
-        cuvette_for_transfer.set_offset(x=-0.7, y=-0.9, z=0.0)
+        cuvette_for_transfer.set_offset(x=-0.5, y=-1.5, z=6.0)
 
         while True:
 
@@ -304,19 +329,19 @@ def run(protocol: protocol_api.ProtocolContext):
                 del protocol.deck["1"]
 
                 cuvette_rack = protocol.load_labware("aau_24_tuberack_3000ul", 1)
-                cuvette_rack.set_offset(x=-0.8, y=-1.9, z=0.0)
+                cuvette_rack.set_offset(x=-0.7, y=-1.7, z=6.0)
 
                 #prepare next test sample
                 t = Timer()
                 t.start()
 
-                right_pipette.transfer(v_AB, fehlings_ingredients["B1"], fehlings_mix.wells()[item_id]) #aspirating and dispensing A part
+                right_pipette.transfer(v_AB, fehlings_ingredients["B5"], fehlings_mix.wells()[item_id]) #aspirating and dispensing A part
                 large_pipettes += 1
                 fehlings_a_used += v_AB
 
                 right_pipette.pick_up_tip()
                 large_pipettes += 1
-                right_pipette.aspirate(v_AB, fehlings_ingredients["B2"]) #aspirating B part
+                right_pipette.aspirate(v_AB, fehlings_ingredients["B6"]) #aspirating B part
                 fehlings_b_used += v_AB
                 right_pipette.dispense(v_AB, fehlings_mix.wells()[item_id]) #dispensing B part
                 right_pipette.mix(2, v_fehlings + 50, fehlings_mix.wells()[item_id]) # mixing the fehlings solution
@@ -342,7 +367,7 @@ def run(protocol: protocol_api.ProtocolContext):
                 del protocol.deck["1"]
 
                 cuvette_for_transfer = protocol.load_labware("aau_96_tiprack_3000ul", 1)
-                cuvette_for_transfer.set_offset(x=-0.7, y=-0.9, z=0.0)
+                cuvette_for_transfer.set_offset(x=-0.5, y=-1.5, z=6.0)
 
                 right_pipette.pick_up_tip(cuvette_for_transfer[cuvette_tip_wells[item_id]])
                 right_pipette.drop_tip(water_bath[water_bath_wells[slot_to_use]])
@@ -368,15 +393,15 @@ def run(protocol: protocol_api.ProtocolContext):
         right_pipette.drop_tip(cuvette_for_transfer[cuvette_tip_wells[expired_id]])
 
 
-    protocol.comment("Processed " + str(protocol.params.sample_count) + " samples.")
-    protocol.comment("Target concentrations: " + ", ".join([f"{c:.2f}%" for c in c2_list]))
+    protocol.comment("No. of samples:" + str(protocol.params.sample_count))
+    protocol.comment("Target concentrations[%]: " + ", ".join([f"{c:.2f}" for c in c2_list]))
     protocol.comment("Large pipette tips used: " + str(large_pipettes))
     protocol.comment("Small pipette tips used: " + str(small_pipettes))
-    protocol.comment(f"Glucose stock solution used: {stock_used:.2f} µL")
-    protocol.comment(f"Water used: {water_used:.2f} µL")
-    protocol.comment(f"Fehlings A solution used: {fehlings_a_used:.2f} µL")
-    protocol.comment(f"Fehlings B solution used: {fehlings_b_used:.2f} µL")
-    protocol.comment("Prep times: " + ", ".join([f"{pt:.2f}s" for pt in prep_times]))
+    protocol.comment(f"Glucose stock solution used [ul]: {stock_used:.2f}")
+    protocol.comment(f"Water used [ul]: {water_used:.2f}")
+    protocol.comment(f"Fehlings A solution used [ul]: {fehlings_a_used:.2f}")
+    protocol.comment(f"Fehlings B solution used [ul]: {fehlings_b_used:.2f}")
+    protocol.comment("Prep times[s]: " + ", ".join([f"{pt:.2f}" for pt in prep_times]))
 
     total_time = tt.elapsed()
-    protocol.comment(f"Total protocol time: {total_time:.2f} seconds.")
+    protocol.comment(f"Total protocol time[s]: {total_time:.2f}")

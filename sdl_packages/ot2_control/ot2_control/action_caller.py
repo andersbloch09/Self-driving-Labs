@@ -4,15 +4,20 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 import os
+import sys
+import argparse
 from ot2_interfaces.action import RunProtocol
 from ot2_interfaces.srv import StopProtocol
 import json
 
 
 class SimpleClient(Node):
-    def __init__(self):
+    def __init__(self, protocol_path, custom_labware_folder, params):
         super().__init__('simple_client')
         self.client = ActionClient(self, RunProtocol, 'run_protocol')
+        self.protocol_path = protocol_path
+        self.custom_labware_folder = custom_labware_folder
+        self.params = params
 
 
          # Inside your node's __init__ method:
@@ -42,21 +47,13 @@ class SimpleClient(Node):
     def send_goal(self):
         self.client.wait_for_server()
 
-        pkg_dir = os.path.join(os.path.expanduser('~'), 'sdl_ws', 'src', 'ot2_control', 'ot2_control')
-        protocol_path = os.path.join(pkg_dir, 'protocols', 'full_protocol.py')
-        custom_labware_folder = os.path.join(pkg_dir, 'custom_labware')
-        params = {
-            "sample_count": 1,
-            "heating_time": 60,
-            "large_tips_used": 0,
-            "max_concentration": 5,
-            "min_concentration": 1,
-        }
-
         goal = RunProtocol.Goal()
-        goal.protocol_path = protocol_path
-        goal.custom_labware_folder = custom_labware_folder
-        goal.parameters_json = json.dumps(params)
+        goal.protocol_path = self.protocol_path
+        goal.custom_labware_folder = self.custom_labware_folder
+        goal.parameters_json = json.dumps(self.params)
+        
+        self.get_logger().info(f"Sending goal with protocol: {self.protocol_path}")
+        self.get_logger().info(f"Parameters: {json.dumps(self.params, indent=2)}")
 
         self._send_goal_future = self.client.send_goal_async(
             goal,
@@ -128,11 +125,47 @@ class SimpleClient(Node):
         rclpy.shutdown()
 
 
-def main(args=None):
-    rclpy.init(args=args)
-    client = SimpleClient()
+def default_protocol_path():
+    pkg_dir = os.path.join(os.path.expanduser('~'), 'sdl_ws', 'src', 'ot2_control', 'ot2_control')
+    return os.path.join(pkg_dir, 'protocols', 'full_protocol.py')
+
+def default_labware_folder():
+    pkg_dir = os.path.join(os.path.expanduser('~'), 'sdl_ws', 'src', 'ot2_control', 'ot2_control')
+    return os.path.join(pkg_dir, 'custom_labware')
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Call RunProtocol action with custom parameters')
+    parser.add_argument('--protocol', '-p', default=default_protocol_path(), 
+                        help='Path to protocol .py file')
+    parser.add_argument('--labware', '-l', default=default_labware_folder(),
+                        help='Custom labware folder path')
+    parser.add_argument('--sample-count', type=int, default=1,
+                        help='Number of samples to process (default: 1)')
+    parser.add_argument('--heating-time', type=int, default=60,
+                        help='Heating time in seconds (default: 60)')
+    parser.add_argument('--large-tips-used', type=int, default=0,
+                        help='Number of large tips already used (default: 0)')
+    parser.add_argument('--max-concentration', type=float, default=5.0,
+                        help='Maximum concentration (default: 5.0)')
+    parser.add_argument('--min-concentration', type=float, default=1.0,
+                        help='Minimum concentration (default: 1.0)')
+    
+    args = parser.parse_args(argv)
+    
+    # Build parameters dictionary
+    params = {
+        "sample_count": args.sample_count,
+        "heating_time": args.heating_time,
+        "large_tips_used": args.large_tips_used,
+        "max_concentration": args.max_concentration,
+        "min_concentration": args.min_concentration,
+    }
+    
+    rclpy.init()
+    client = SimpleClient(args.protocol, args.labware, params)
     client.send_goal()
     rclpy.spin(client)
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
