@@ -46,11 +46,11 @@ class SimpleClient(Node):
         protocol_path = os.path.join(pkg_dir, 'protocols', 'full_protocol.py')
         custom_labware_folder = os.path.join(pkg_dir, 'custom_labware')
         params = {
-            "sample_count": 1,
-            "heating_time": 60,
+            "sample_count": 5,
+            "heating_time": 600,
             "large_tips_used": 0,
-            "max_concentration": 5,
-            "min_concentration": 1,
+            "max_concentration": 0.3,
+            "min_concentration": 0.025,
         }
 
         goal = RunProtocol.Goal()

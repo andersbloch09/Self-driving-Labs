@@ -70,9 +70,17 @@ def generate_launch_description():
         output='screen'
     )
 
+    ot2_controller_node = Node(
+        package='ot2_control',
+        executable='ot2_manager.py',
+        name='ot2_control',
+        output='screen'
+    )
+
     return LaunchDescription([
         use_rviz_arg,          # <-- MUST BE INCLUDED
         franka_moveit_launch,
         realsense_launch,
-        aruco_node
+        aruco_node,
+        ot2_controller_node
     ])

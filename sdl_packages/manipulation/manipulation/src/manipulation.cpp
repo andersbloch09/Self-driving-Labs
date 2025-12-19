@@ -206,6 +206,12 @@ public:
       {0.0, 0.0, 0.0}          // orientation (RPY)
     };
 
+    object_map[3] = {
+      "package://manipulation/env_meshes/storage_board.stl",
+      {0.0, 0.0, 0.0},       // position
+      {0.0, 0.0, 0.0}         // orientation (RPY)
+    };
+
 
     RCLCPP_INFO(logger_, "manipulation completed!");
   }
@@ -1027,11 +1033,60 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
     std::string slot_transform = database_lib::getContainerLocationTransform(container_name);
 
     RCLCPP_INFO(logger_, "Picking up container: %s from slot: %s", container_name.c_str(), slot_transform.c_str());
+    
+    std::string storage_object = database_lib::getContainerStorageObjectByContainerName(container_name);
+
+    std::vector<std::string> container_names = database_lib::getAllContainersInStorageObject(storage_object);
+    std::string slot;
+    double x = 0.0, y = 0.0, z = 0.0, roll = 0.0, pitch = 0.0, yaw = 0.0;
+    if(is_ot){
+    for (const auto& name : container_names) {
+        RCLCPP_INFO(logger_, "Container in storage object: %s", name.c_str());
+    }
+    // Initialize coordinates
+    for (const auto& name : container_names) {
+        std::string object_transforms = database_lib::getContainerLocationTransform(name);
+        if (!object_transforms.empty()) {
+        try {
+            // Parse JSON
+            auto json = nlohmann::json::parse(object_transforms);
+            
+            // Extract values
+            x = json["translation"][0];
+            y = json["translation"][1];
+            z = json["translation"][2];
+            roll = json["rotation_RPY"][0];
+            pitch = json["rotation_RPY"][1];
+            yaw = json["rotation_RPY"][2];
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(logger_, "Error parsing transform JSON: %s", e.what());
+            return false;
+        }
+    }
+    geometry_msgs::msg::Pose object_pose;
+    object_pose.position.x = x -0.12;
+    object_pose.position.y = y;
+    object_pose.position.z = z;
+    tf2::Quaternion q;
+    q.setRPY(deg2rad(roll), deg2rad(pitch), deg2rad(yaw));
+    object_pose.orientation = tf2::toMsg(q);
+    
+    // add object 
+    manip_->addCollisionMesh(
+      "package://manipulation/env_meshes/glass_holder.stl",
+      object_pose,
+      name,
+      "aruco_marker"
+      );
+
+    manip_->attachBox(
+      name,
+      "aruco_marker"
+    );
+    }
+  }
 
     std::string transform = database_lib::getContainerLocationTransform(container_name);
-    // Initialize coordinates
-    double x = 0.0, y = 0.0, z = 0.0, roll = 0.0, pitch = 0.0, yaw = 0.0;
-    std::string slot;
     if (!transform.empty()) {
         try {
             // Parse JSON
@@ -1079,11 +1134,6 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
       "aruco_marker",
       {x, y, z, deg2rad(roll), deg2rad(pitch), deg2rad(yaw)});
     
-    manip_->planCartesianPath(
-      "panda_hand_tcp",
-      {0, 0, 0.1, 0, 0, 0},
-      false);
-     
     geometry_msgs::msg::Pose pose;
     pose.position.z = 0.04;
     
@@ -1099,6 +1149,13 @@ void handle_canceled_pick_up_container(const std::shared_ptr<GoalHandlePickUp>)
       container_name,
       "panda_hand_tcp"
     );
+
+    manip_->planCartesianPath(
+      "panda_hand_tcp",
+      {0, 0, 0.1, 0, 0, 0},
+      false);
+     
+    
     // Close gripper
     manip_->MoveGripper(0.031, 0.031); // close
   

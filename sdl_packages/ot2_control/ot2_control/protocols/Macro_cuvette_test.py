@@ -15,8 +15,3 @@ def run(protocol: protocol_api.ProtocolContext):
     right_pipette = protocol.load_instrument("p300_single_gen2", "right", tip_racks=[tips])
 
     right_pipette.transfer(100, reservoir["A1"], cuvette_rack.wells())
-
-    for i in range(4):
-        row = cuvette_rack.rows()[i]
-        right_pipette.transfer(100, reservoir["A1"], row[0], mix_after=(3, 50))
-        #right_pipette.transfer(100, row[:5], row[1:], mix_after=(3, 50))

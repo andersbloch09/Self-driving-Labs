@@ -1,16 +1,43 @@
  <root BTCPP_format="4" >
-     <BehaviorTree ID="BT_Transport_test">
+     <BehaviorTree ID="BT_Holistic_End">
         <Sequence name="root_sequence">
             <!-- Move MiR to storage location-->
-            <GoToMission name="go_to_OT" 
+            <GoToMission name="go_to_ot" 
                         action_name="go_to_mission"
                         mission_id="4898e76e-cc3a-11f0-b937-000e8e984489" /> 
-            
+
+            <!-- Calibrate camera using left side of cube -->
+            <FrankaCalibrationAction name="cube_calibrate_left"
+                                    action_name="cube_visual_calibration"
+                                    side="left" />
+            <!-- Home the Franka manipulator -->
+            <GoHomeAction name="go_home"
+                                   action_name="go_home"
+                                   clear_planning_scene="false" />
+
+            <!-- Pick up Container1 -->
+            <PickUpAction name="pick_container3"
+                         action_name="pick_up_container"
+                         container_name="cuvette_tray"
+                         is_ot="true"/>
+
+            <!-- Pick up Container1 -->
+            <PickUpAction name="pick_container3"
+                         action_name="pick_up_container"
+                         container_name="reagent_tray"
+                         is_ot="true"/>
+
             <!-- Home the Franka manipulator -->
             <GoHomeAction name="go_home"
                                    action_name="go_home"
                                    clear_planning_scene="true" />
+
             
+            <GoToMission name="sample_handover" 
+                        action_name="go_to_mission"
+                        mission_id="21f5c79b-d200-11f0-badc-000e8e984489" />
+
+
             <!-- Calibrate camera using left side of cube -->
             <FrankaCalibrationAction name="cube_calibrate_left"
                                     action_name="cube_visual_calibration"
@@ -20,30 +47,18 @@
             <GoHomeAction name="go_home"
                                    action_name="go_home"
                                    clear_planning_scene="false" />
+
+            <PlaceAction name="place_container3"
+                        action_name="place_container"
+                        container_name="cuvette_tray"
+                        slot_name = ""
+                        />
             
-             <!-- Pick up Container1 -->
-            <PickUpAction name="pick_container1"
-                         action_name="pick_up_container"
-                         container_name="Container1"
-                         is_ot="true"/>
-
-            <!-- Pick up Container1 -->
-            <PickUpAction name="pick_container3"
-                         action_name="pick_up_container"
-                         container_name="Container3"
-                         is_ot="true"/>
-
-            <!-- Pick up Container1 -->
-            <PickUpAction name="pick_container4"
-                         action_name="pick_up_container"
-                         container_name="Container4"
-                         is_ot="true"/>
             <!-- Home the Franka manipulator -->
             <GoHomeAction name="go_home"
                                    action_name="go_home"
                                    clear_planning_scene="true" />
 
-            <!-- Move MiR to storage location-->
             <GoToMission name="go_to_storage" 
                         action_name="go_to_mission"
                         mission_id="5d4bcfbf-cc3a-11f0-b937-000e8e984489" /> 
@@ -52,25 +67,15 @@
             <FrankaCalibrationAction name="cube_calibrate_left"
                                     action_name="cube_visual_calibration"
                                     side="left" />
+
             <!-- Home the Franka manipulator -->
             <GoHomeAction name="go_home"
                                    action_name="go_home"
                                    clear_planning_scene="false" />
-            <!-- Place Container1 -->
-            <PlaceAction name="place_container1"
-                        action_name="place_container"
-                        container_name="Container1"
-                        slot_name = ""
-                        />
 
             <PlaceAction name="place_container3"
-                        action_name="place_container"
-                        container_name="Container3"
-                        slot_name = ""
-                        />
-            <PlaceAction name="place_container4"
-                        action_name="place_container"
-                        container_name="Container4"
+                        action_name="place_container_OT"
+                        container_name="reagent_tray"
                         slot_name = ""
                         />
 
@@ -79,10 +84,11 @@
                                    action_name="go_home"
                                    clear_planning_scene="true" />
             
-            <!-- Return MiR to home position 
+            <!-- Move MiR to storage location-->
             <GoToMission name="go_to_home" 
                         action_name="go_to_mission"
-                        mission_id="d7e12b66-cc39-11f0-b937-000e8e984489" />-->
+                        mission_id="d7e12b66-cc39-11f0-b937-000e8e984489" /> 
+
         </Sequence>
      </BehaviorTree>
  </root>

@@ -3,17 +3,55 @@
 #include <pqxx/pqxx>
 #include <memory>
 #include <stdexcept>
+#include <vector>
+#include <string>
 
 namespace database_lib {
 
+// NOTE: The struct StorageObjectInfo is defined only in the header file.
+
+// Helper function to create the connection string, now including the application name
+std::string create_conn_string(const std::string& db_name, const std::string& db_user,
+                               const std::string& db_password, const std::string& db_host,
+                               const std::string& db_port)
+{
+    std::string conn_str = "dbname=" + db_name + 
+                           " user=" + db_user + 
+                           " password=" + db_password + 
+                           " host=" + db_host + 
+                           " port=" + db_port;
+    
+    // FIX 1: Add application_name to the connection string to avoid set_session_var error
+    conn_str += " application_name='ROS2RobotSystem'"; 
+    return conn_str;
+}
+
+// Macro for repetitive connection check 
+#define CHECK_CONNECTION_AND_RETURN(ret_val) \
+    if (!connection_ || !connection_->is_open()) { \
+        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Database connection is not open. Function aborted."); \
+        return ret_val; \
+    }
+
+// --- REFACTORED CONSTRUCTORS ---
+
 DatabaseHelpers::DatabaseHelpers() 
 {
-    // Initialize connection parameters with defaults
     db_name_ = "postgres";
     db_user_ = "postgres.mytenant";
     db_password_ = "your-super-secret-and-long-postgres-password";
     db_host_ = "172.17.0.1";
     db_port_ = "5432";
+
+    try {
+        std::string connection_string = create_conn_string(db_name_, db_user_, db_password_, db_host_, db_port_);
+        connection_ = std::make_unique<pqxx::connection>(connection_string);
+        RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                    "Long-lived database connection established successfully.");
+    } catch (const std::exception &e) {
+        RCLCPP_FATAL(rclcpp::get_logger("database_helpers"), 
+                     "FATAL: Error establishing database connection: %s", e.what());
+    }
 }
 
 DatabaseHelpers::DatabaseHelpers(const std::string& db_name, const std::string& db_user,
@@ -22,42 +60,26 @@ DatabaseHelpers::DatabaseHelpers(const std::string& db_name, const std::string& 
     : db_name_(db_name), db_user_(db_user), db_password_(db_password), 
       db_host_(db_host), db_port_(db_port)
 {
-}
-
-void* DatabaseHelpers::createConnection()
-{
-    return createConnection(db_name_, db_user_, db_password_, db_host_, db_port_);
-}
-
-void* DatabaseHelpers::createConnection(const std::string& db_name, const std::string& db_user,
-                                       const std::string& db_password, const std::string& db_host,
-                                       const std::string& db_port)
-{
     try {
-        std::string connection_string = "dbname=" + db_name + 
-                                       " user=" + db_user + 
-                                       " password=" + db_password + 
-                                       " host=" + db_host + 
-                                       " port=" + db_port;
-        return new pqxx::connection(connection_string);
+        std::string connection_string = create_conn_string(db_name_, db_user_, db_password_, db_host_, db_port_);
+        connection_ = std::make_unique<pqxx::connection>(connection_string);
+        RCLCPP_INFO(rclcpp::get_logger("database_helpers"), 
+                    "Long-lived database connection established successfully.");
     } catch (const std::exception &e) {
-        RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
-                    "Error creating connection: %s", e.what());
-        return nullptr;
+        RCLCPP_FATAL(rclcpp::get_logger("database_helpers"), 
+                     "FATAL: Error establishing database connection: %s", e.what());
     }
 }
 
+// --- REFACTORED METHODS ---
+
 std::string DatabaseHelpers::getFreeSlot(const std::string& storage_object_name)
 {
+    CHECK_CONNECTION_AND_RETURN("");
+    
     try {
-        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
-        if (!connection) {
-            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
-            return "";
-        }
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // Query to find the first available slot in the specified storage object
         std::string query = R"(
             SELECT s.transform_to_object
             FROM slots s
@@ -75,9 +97,7 @@ std::string DatabaseHelpers::getFreeSlot(const std::string& storage_object_name)
                        "No free slots found in storage object: %s", storage_object_name.c_str());
             return "";
         }
-        // return the transform of the first free slot found
         std::string free_slot = result[0][0].as<std::string>();
-
         transaction.commit();
         
         return free_slot;
@@ -91,15 +111,11 @@ std::string DatabaseHelpers::getFreeSlot(const std::string& storage_object_name)
 
 bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, const std::string& slot_name)
 {
+    CHECK_CONNECTION_AND_RETURN(false);
+    
     try {
-        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
-        if (!connection) {
-            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
-            return false;
-        }
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // First, get the current location of the container for logging (both name and UUID)
         std::string current_location_query = R"(
             SELECT s.name, s.id
             FROM containers c
@@ -114,11 +130,10 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
             from_slot = current_result[0][0].as<std::string>();
             from_slot_id = current_result[0][1].as<std::string>();
         } else {
-            from_slot = "unassigned"; // Container was not previously assigned to any slot
-            from_slot_id = ""; // No previous slot ID
+            from_slot = "unassigned";
+            from_slot_id = "";
         }
         
-        // Get the slot_id and storage_object_id for the new location
         std::string slot_query = "SELECT id, storage_object_id FROM slots WHERE name = " + transaction.quote(slot_name) + ";";
         pqxx::result slot_result = transaction.exec(slot_query);
         
@@ -131,18 +146,15 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
         std::string slot_id = slot_result[0][0].as<std::string>();
         std::string storage_object_id = slot_result[0][1].as<std::string>();
         
-        // Get the storage object name for the containers table
         std::string storage_query = "SELECT name FROM storage_objects WHERE id = " + transaction.quote(storage_object_id) + ";";
         pqxx::result storage_result = transaction.exec(storage_query);
         std::string storage_object_name = storage_result[0][0].as<std::string>();
         
-        // First, clear the old slot if container was previously assigned
         if (from_slot != "unassigned") {
             std::string clear_old_slot_query = "UPDATE slots SET container_id = NULL, status = 'available' WHERE container_id = " + transaction.quote(container_id) + ";";
             transaction.exec(clear_old_slot_query);
         }
         
-        // Update container location in containers table
         std::string update_container_query = "UPDATE containers SET current_slot_id = " + transaction.quote(slot_id) + 
                                            ", current_storage_object = " + transaction.quote(storage_object_name) +
                                            ", last_update = NOW()" +
@@ -150,14 +162,12 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
         
         pqxx::result update_result = transaction.exec(update_container_query);
         
-        // Check if the update actually affected any rows
         if (update_result.affected_rows() == 0) {
             RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
                         "Container '%s' not found in database", container_id.c_str());
             return false;
         }
         
-        // Update the slot to reference this container
         std::string update_slot_query = "UPDATE slots SET container_id = " + 
                                        transaction.quote(container_id) + 
                                        ", status = 'occupied'" +
@@ -165,10 +175,8 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
         
         transaction.exec(update_slot_query);
         
-        // Automatically log the movement using UUIDs for database compatibility
         std::string log_query;
         if (!from_slot_id.empty()) {
-            // Moving from one slot to another
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", " +
@@ -176,7 +184,6 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
                            transaction.quote(slot_id) + ", " +
                            transaction.quote("robot_system") + ", NOW());";
         } else {
-            // Moving from unassigned to a slot
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", NULL, " +
@@ -198,15 +205,11 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
 
 bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, const std::string& slot_name, const std::string& moved_by)
 {
+    CHECK_CONNECTION_AND_RETURN(false);
+
     try {
-        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
-        if (!connection) {
-            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
-            return false;
-        }
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // First, get the current location of the container for logging (both name and UUID)
         std::string current_location_query = R"(
             SELECT s.name, s.id
             FROM containers c
@@ -221,11 +224,10 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
             from_slot = current_result[0][0].as<std::string>();
             from_slot_id = current_result[0][1].as<std::string>();
         } else {
-            from_slot = "unassigned"; // Container was not previously assigned to any slot
-            from_slot_id = ""; // No previous slot ID
+            from_slot = "unassigned"; 
+            from_slot_id = ""; 
         }
         
-        // Get the slot_id and storage_object_id for the new location
         std::string slot_query = "SELECT id, storage_object_id FROM slots WHERE name = " + transaction.quote(slot_name) + ";";
         pqxx::result slot_result = transaction.exec(slot_query);
         
@@ -238,33 +240,28 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
         std::string slot_id = slot_result[0][0].as<std::string>();
         std::string storage_object_id = slot_result[0][1].as<std::string>();
         
-        // Get the storage object name for the containers table
         std::string storage_query = "SELECT name FROM storage_objects WHERE id = " + transaction.quote(storage_object_id) + ";";
         pqxx::result storage_result = transaction.exec(storage_query);
         std::string storage_object_name = storage_result[0][0].as<std::string>();
         
-        // First, clear the old slot if container was previously assigned
         if (from_slot != "unassigned") {
             std::string clear_old_slot_query = "UPDATE slots SET container_id = NULL, status = 'available' WHERE container_id = " + transaction.quote(container_id) + ";";
             transaction.exec(clear_old_slot_query);
         }
         
-        // Update container location in containers table
-        std::string update_query = "UPDATE containers SET current_slot_id = " + transaction.quote(slot_id) + 
-                                  ", current_storage_object = " + transaction.quote(storage_object_name) +
-                                  ", last_update = NOW()" +
-                                  " WHERE id = " + transaction.quote(container_id) + ";";
+        std::string update_container_query = "UPDATE containers SET current_slot_id = " + transaction.quote(slot_id) + 
+                                           ", current_storage_object = " + transaction.quote(storage_object_name) +
+                                           ", last_update = NOW()" +
+                                           " WHERE id = " + transaction.quote(container_id) + ";";
         
-        pqxx::result update_result = transaction.exec(update_query);
+        pqxx::result update_result = transaction.exec(update_container_query);
         
-        // Check if the update actually affected any rows
         if (update_result.affected_rows() == 0) {
             RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
                         "Container '%s' not found in database", container_id.c_str());
             return false;
         }
         
-        // Update the slot to reference this container
         std::string update_slot_query = "UPDATE slots SET container_id = " + 
                                        transaction.quote(container_id) + 
                                        ", status = 'occupied'" +
@@ -272,17 +269,14 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
         
         transaction.exec(update_slot_query);
         
-        // Check if the update actually affected any rows
         if (update_result.affected_rows() == 0) {
             RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
                         "Container '%s' not found in database", container_id.c_str());
             return false;
         }
         
-        // Automatically log the movement with the provided moved_by parameter using UUIDs
         std::string log_query;
         if (!from_slot_id.empty()) {
-            // Moving from one slot to another
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", " +
@@ -290,7 +284,6 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
                            transaction.quote(slot_id) + ", " +
                            transaction.quote(moved_by) + ", NOW());";
         } else {
-            // Moving from unassigned to a slot
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", NULL, " +
@@ -312,9 +305,10 @@ bool DatabaseHelpers::updateContainerLocation(const std::string& container_id, c
 
 std::string DatabaseHelpers::getContainerLocation(const std::string& container_id)
 {
+    CHECK_CONNECTION_AND_RETURN("");
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
         std::string query = R"(
             SELECT s.name 
@@ -344,9 +338,10 @@ std::string DatabaseHelpers::getContainerLocation(const std::string& container_i
 
 std::string DatabaseHelpers::getContainerLocationByName(const std::string& container_name)
 {
+    CHECK_CONNECTION_AND_RETURN("");
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
         std::string query = R"(
             SELECT s.name 
@@ -376,9 +371,10 @@ std::string DatabaseHelpers::getContainerLocationByName(const std::string& conta
 
 std::string DatabaseHelpers::getContainerLocationTransform(const std::string& container_name)
 {
+    CHECK_CONNECTION_AND_RETURN("");
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
         std::string query = R"(
             SELECT s.transform_to_object 
@@ -410,9 +406,10 @@ StorageObjectInfo DatabaseHelpers::getStorageObjectInfo(const std::string& stora
 {
     StorageObjectInfo info;
     
+    CHECK_CONNECTION_AND_RETURN(info);
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
         std::string query = R"(
             SELECT id, name, type, parent_id, transform_to_parent, description
@@ -450,11 +447,11 @@ StorageObjectInfo DatabaseHelpers::getStorageObjectInfo(const std::string& stora
 bool DatabaseHelpers::logMovement(const std::string& container_id, const std::string& from_slot, 
                                  const std::string& to_slot, const std::string& moved_by)
 {
+    CHECK_CONNECTION_AND_RETURN(false);
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // Log movement using slot names for human readability
         std::string query = R"(
             INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
             VALUES ()" + transaction.quote(container_id) + ", " +
@@ -478,12 +475,13 @@ std::vector<std::string> DatabaseHelpers::getAllContainersInStorageObject(const 
 {
     std::vector<std::string> containers;
     
+    CHECK_CONNECTION_AND_RETURN(containers);
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
         std::string query = R"(
-            SELECT c.id 
+            SELECT c.name 
             FROM containers c
             JOIN slots s ON c.current_slot_id = s.id
             JOIN storage_objects so ON s.storage_object_id = so.id
@@ -508,9 +506,10 @@ std::vector<std::string> DatabaseHelpers::getAllContainersInStorageObject(const 
 
 std::string DatabaseHelpers::getContainerStorageObjectByContainerName(const std::string& container_name)
 {
+    CHECK_CONNECTION_AND_RETURN("");
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
         std::string query = R"(
             SELECT so.name 
@@ -541,11 +540,11 @@ std::string DatabaseHelpers::getContainerStorageObjectByContainerName(const std:
 
 bool DatabaseHelpers::updateContainerLocationByName(const std::string& container_name, const std::string& slot_name)
 {
+    CHECK_CONNECTION_AND_RETURN(false);
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // First, get the current location of the container for logging (both name and UUID)
         std::string current_location_query = R"(
             SELECT s.name, s.id
             FROM containers c
@@ -566,11 +565,10 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
             from_slot = current_result[0][0].as<std::string>();
             from_slot_id = current_result[0][1].as<std::string>();
         } else {
-            from_slot = "unassigned"; // Container was not previously assigned to any slot
-            from_slot_id = ""; // No previous slot ID
+            from_slot = "unassigned"; 
+            from_slot_id = ""; 
         }
         
-        // Get the slot_id for the new location
         std::string slot_query = "SELECT id FROM slots WHERE name = " + transaction.quote(slot_name) + ";";
         pqxx::result slot_result = transaction.exec(slot_query);
         
@@ -582,29 +580,24 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
         
         std::string slot_id = slot_result[0][0].as<std::string>();
         
-        // Update container location
         std::string update_query = "UPDATE containers SET current_slot_id = " + transaction.quote(slot_id) + 
                                   " WHERE name = " + transaction.quote(container_name) + ";";
         
         pqxx::result update_result = transaction.exec(update_query);
         
-        // Check if the update actually affected any rows
         if (update_result.affected_rows() == 0) {
             RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), 
                         "Failed to update container '%s' - no rows affected", container_name.c_str());
             return false;
         }
         
-        // Get container ID for slot update and logging
         std::string container_id_query = "SELECT id FROM containers WHERE name = " + transaction.quote(container_name) + ";";
         pqxx::result container_id_result = transaction.exec(container_id_query);
         std::string container_id = container_id_result[0][0].as<std::string>();
         
-        // Clear the old slot (free up previous location)
         std::string clear_old_slot_query = "UPDATE slots SET container_id = NULL, status = 'available' WHERE container_id = " + transaction.quote(container_id) + ";";
         transaction.exec(clear_old_slot_query);
         
-        // Update the slot to reference this container and mark as occupied
         std::string update_slot_query = "UPDATE slots SET container_id = " + 
                                        transaction.quote(container_id) + 
                                        ", status = 'occupied'" +
@@ -612,10 +605,8 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
         
         transaction.exec(update_slot_query);
         
-        // Automatically log the movement using UUIDs for database compatibility
         std::string log_query;
         if (!from_slot_id.empty()) {
-            // Moving from one slot to another
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", " +
@@ -623,7 +614,6 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
                            transaction.quote(slot_id) + ", " +
                            transaction.quote("robot_system") + ", NOW());";
         } else {
-            // Moving from unassigned to a slot
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", NULL, " +
@@ -645,11 +635,11 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
 
 bool DatabaseHelpers::updateContainerLocationByName(const std::string& container_name, const std::string& slot_name, const std::string& moved_by)
 {
+    CHECK_CONNECTION_AND_RETURN(false);
+    
     try {
-        auto connection = static_cast<pqxx::connection*>(createConnection());
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // First, get the current location of the container for logging (both name and UUID)
         std::string current_location_query = R"(
             SELECT s.name, s.id
             FROM containers c
@@ -674,7 +664,6 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
             from_slot_id = "";
         }
         
-        // Get the slot_id for the new location
         std::string slot_query = "SELECT id FROM slots WHERE name = " + transaction.quote(slot_name) + ";";
         pqxx::result slot_result = transaction.exec(slot_query);
         
@@ -686,7 +675,6 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
         
         std::string slot_id = slot_result[0][0].as<std::string>();
         
-        // Update container location
         std::string update_query = "UPDATE containers SET current_slot_id = " + transaction.quote(slot_id) + 
                                   " WHERE name = " + transaction.quote(container_name) + ";";
         
@@ -698,16 +686,13 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
             return false;
         }
         
-        // Get container ID for logging
         std::string container_id_query = "SELECT id FROM containers WHERE name = " + transaction.quote(container_name) + ";";
         pqxx::result container_id_result = transaction.exec(container_id_query);
         std::string container_id = container_id_result[0][0].as<std::string>();
         
-        // Clear the old slot (free up previous location)
         std::string clear_old_slot_query = "UPDATE slots SET container_id = NULL, status = 'available' WHERE container_id = " + transaction.quote(container_id) + ";";
         transaction.exec(clear_old_slot_query);
         
-        // Update the slot to reference this container and mark as occupied
         std::string update_slot_query = "UPDATE slots SET container_id = " + 
                                        transaction.quote(container_id) + 
                                        ", status = 'occupied'" +
@@ -715,10 +700,8 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
         
         transaction.exec(update_slot_query);
         
-        // Automatically log the movement using UUIDs for database compatibility
         std::string log_query;
         if (!from_slot_id.empty()) {
-            // Moving from one slot to another
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", " +
@@ -726,7 +709,6 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
                            transaction.quote(slot_id) + ", " +
                            transaction.quote(moved_by) + ", NOW());";
         } else {
-            // Moving from unassigned to a slot
             log_query = R"(
                 INSERT INTO movements (container_id, from_slot, to_slot, moved_by, timestamp)
                 VALUES ()" + transaction.quote(container_id) + ", NULL, " +
@@ -748,15 +730,11 @@ bool DatabaseHelpers::updateContainerLocationByName(const std::string& container
 
 bool DatabaseHelpers::moveContainerToStorageObject(const std::string& container_id, const std::string& storage_object_name)
 {
+    CHECK_CONNECTION_AND_RETURN(false);
+    
     try {
-        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
-        if (!connection) {
-            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
-            return false;
-        }
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // First, find a free slot in the specified storage object
         std::string free_slot_query = R"(
             SELECT s.name 
             FROM slots s
@@ -783,7 +761,6 @@ bool DatabaseHelpers::moveContainerToStorageObject(const std::string& container_
         
         transaction.commit();
         
-        // Now use the existing updateContainerLocation function to move the container
         return updateContainerLocation(container_id, free_slot_name, "auto_placement");
         
     } catch (const std::exception &e) {
@@ -795,15 +772,11 @@ bool DatabaseHelpers::moveContainerToStorageObject(const std::string& container_
 
 bool DatabaseHelpers::moveContainerToStorageObjectByName(const std::string& container_name, const std::string& storage_object_name)
 {
+    CHECK_CONNECTION_AND_RETURN(false);
+    
     try {
-        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
-        if (!connection) {
-            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
-            return false;
-        }
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // First, find a free slot in the specified storage object
         std::string free_slot_query = R"(
             SELECT s.name 
             FROM slots s
@@ -830,7 +803,6 @@ bool DatabaseHelpers::moveContainerToStorageObjectByName(const std::string& cont
         
         transaction.commit();
         
-        // Now use the existing updateContainerLocationByName function to move the container
         return updateContainerLocationByName(container_name, free_slot_name, "auto_placement");
         
     } catch (const std::exception &e) {
@@ -842,15 +814,11 @@ bool DatabaseHelpers::moveContainerToStorageObjectByName(const std::string& cont
 
 std::string DatabaseHelpers::getSlotTransform(const std::string& slot_name)
 {
+    CHECK_CONNECTION_AND_RETURN("");
+    
     try {
-        std::unique_ptr<pqxx::connection> connection(static_cast<pqxx::connection*>(createConnection()));
-        if (!connection) {
-            RCLCPP_ERROR(rclcpp::get_logger("database_helpers"), "Failed to create database connection");
-            return "";
-        }
-        pqxx::work transaction(*connection);
+        pqxx::work transaction(*connection_);
         
-        // Query to get the transform for a specific slot
         std::string query = R"(
             SELECT s.transform_to_object
             FROM slots s
@@ -864,7 +832,6 @@ std::string DatabaseHelpers::getSlotTransform(const std::string& slot_name)
             return "";
         }
         
-        // Return the transform
         std::string slot_transform = result[0][0].as<std::string>();
         
         transaction.commit();

@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+// **FIX 1: Need to include pqxx in the header to declare pqxx::connection**
+#include <pqxx/pqxx> 
 
 namespace database_lib {
 
@@ -63,25 +65,32 @@ public:
     std::string getSlotTransform(const std::string& slot_name);
 
 private:
+    // Existing connection parameters
     std::string db_name_;
     std::string db_user_;
     std::string db_password_;
     std::string db_host_;
     std::string db_port_;
     
+    // **FIX 2: Add the long-lived connection member variable**
+    std::unique_ptr<pqxx::connection> connection_;
+    
+    // **FIX 3: Remove the declarations for the obsolete createConnection functions**
     // Internal helper methods - implementation details hidden in .cpp
-    void* createConnection();
-    void* createConnection(const std::string& db_name, const std::string& db_user,
-                          const std::string& db_password, const std::string& db_host,
-                          const std::string& db_port);
+    // void* createConnection();
+    // void* createConnection(const std::string& db_name, const std::string& db_user,
+    //                       const std::string& db_password, const std::string& db_host,
+    //                       const std::string& db_port);
 };
 
-// Convenience functions for easy import and use
+// Convenience functions for easy import and use (no changes needed)
 std::string getFreeSlot(const std::string& storage_object_name);
 
 bool updateContainerLocation(const std::string& container_id, const std::string& slot_name);
 
 std::string getContainerLocation(const std::string& container_id);
+
+std::string getContainerLocationByName(const std::string& container_name);
 
 StorageObjectInfo getStorageObjectInfo(const std::string& storage_object_name);
 
@@ -89,8 +98,6 @@ bool logMovement(const std::string& container_id, const std::string& from_slot,
                 const std::string& to_slot, const std::string& moved_by = "robot");
 
 bool updateContainerLocation(const std::string& container_id, const std::string& slot_name, const std::string& moved_by);
-
-std::string getContainerLocationByName(const std::string& container_name);
 
 bool updateContainerLocationByName(const std::string& container_name, const std::string& slot_name);
 
